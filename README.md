@@ -6,6 +6,8 @@ This entire `nathan-portfolio` folder is the repository root. Everything require
 
 The portfolio presents four projects, led by **atNathanOsu**, a Java rhythm game with standard and four-key modes.
 
+Desktop content fills more of the viewport while keeping an outer margin. Typography, cards, controls, and spacing scale together on larger screens; mobile retains its compact layout. Images keep their original layout proportions.
+
 The home scene layers a uniform plum tint over the supplied photo at `assets/site-background.jpg`. Extra scrolling at either bound of Project Select retracts the cards slightly toward the right edge, then eases them back into place. Repeated wheel ticks blend into one continuous movement, with the cards returning after scrolling stops. The effect moves only the cards. Longer pages still scroll normally, and reduced motion disables the recoil. Selecting a project rolls its details open while the previous selection rolls closed.
 
 ## Open the portfolio

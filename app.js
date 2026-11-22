@@ -77,12 +77,13 @@
       cursorGravity.y = null;
       cursorGravity.strength = 0;
     }
+    const uiScale = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
     const entries = $$('.song-entry').map(entry => {
       const card = entry.querySelector('.song-card').getBoundingClientRect();
       const distance = cursorGravity.y === null ? Infinity : Math.abs(cursorGravity.y - (card.top + card.height / 2));
-      const proximity = Math.max(0, 1 - distance / 320);
+      const proximity = Math.max(0, 1 - distance / (320 * uiScale));
       const pull = (1 - Math.cos(Math.PI * proximity)) / 2;
-      return { entry, offset: -Math.min(88, window.innerWidth * .061) * pull * cursorGravity.strength };
+      return { entry, offset: -Math.min(88 * uiScale, window.innerWidth * .061) * pull * cursorGravity.strength };
     });
     for (const { entry, offset } of entries) entry.style.setProperty('--cursor-offset', `${offset.toFixed(2)}px`);
     if (cursorGravity.strength !== targetStrength || (projectsActive && cursorGravity.y !== pointerPosition.y)) {
@@ -120,7 +121,7 @@
       projectScroll.velocity = 0;
       projectScroll.frame = 0;
     }
-    $('#song-list').style.setProperty('--card-recoil', `${projectScroll.offset.toFixed(2)}px`);
+    $('#song-list').style.setProperty('--card-recoil', `${(projectScroll.offset / 16).toFixed(4)}rem`);
     queuePointerMotion();
     if (!settled) projectScroll.frame = requestAnimationFrame(springProjectScroll);
   }
