@@ -139,6 +139,7 @@
 
   function render(time) {
     context.clearRect(0, 0, innerWidth, innerHeight);
+    if (window.SiteIntro?.active) return;
     points = points.filter(point => time - point.time < FADE_DURATION);
     for (const point of points) {
       const age = Math.max(0, time - point.time) / FADE_DURATION;
@@ -202,6 +203,7 @@
   window.addEventListener('pagehide', resetPointer);
   window.addEventListener('resize', resize, { passive: true });
   document.addEventListener('visibilitychange', resetPointer);
+  document.addEventListener('site:intro-end', clearTrail);
   finePointer.addEventListener('change', updatePreference);
   new MutationObserver(updatePreference).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   new MutationObserver(records => {

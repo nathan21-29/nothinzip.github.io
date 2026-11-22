@@ -5,6 +5,7 @@ Cursor artwork from **WhiteCat (1.0)** by **cyperdark**, supplied from Nathan's 
 Skin: <https://osu.ppy.sh/community/forums/topics/986201?n=1>
 
 - `cursor@2x.png` and `cursortrail@2x.png` are the original skin sprites.
+- `approachcircle@2x.png` and `hitcircleoverlay@2x.png` are the original skin rings, used over the site's pink hit circles during startup. The scripted slider is an SVG curve so it scales cleanly with the playfield. Numbers use the site's bundled Aller font.
 - `cursor-0.7x.png` is the high-resolution cursor downsampled to 90 × 90 pixels: the skin's 128-pixel logical cursor size at Nathan's requested 0.7× size, rounded to the nearest pixel. The hotspot is centred at (45, 45).
 - `cursor-pressed-92.png` through `cursor-pressed-108.png` are preloaded, centred size frames. Holding Mouse1 enlarges the cursor by 20%; releasing returns it to the 0.7× resting size. Inflation and deflation each last 200 ms with quintic ease-out, including a very slow final approach. Quick reversals start at the current size, and lost focus or a cancelled pointer resets the cursor. Reduced motion switches sizes immediately.
 - Trail sprites use the same 0.7× scale (64 × 0.7 = 44.8 CSS pixels), retaining their original size throughout each fade.
