@@ -19,6 +19,7 @@
   let previouslyFocused;
   let pointerFrame = 0;
   let pointerPosition = null;
+  const cursorGravity = { y: null, strength: 0, time: 0 };
   let previewRequest = 0;
   let previewAnimation;
   let previewProjectId;
@@ -46,23 +47,48 @@
     return state.sort === 'title' ? list.sort((a, b) => a.title.localeCompare(b.title)) : list;
   }
 
-  // One frame per pointer event; CSS eases the layers between their targets.
+  // Keep animating until the averaged cursor height and gravity have settled.
   function queuePointerMotion() {
-    if (!pointerFrame) pointerFrame = requestAnimationFrame(updatePointerMotion);
+    if (!pointerFrame) {
+      cursorGravity.time = 0;
+      pointerFrame = requestAnimationFrame(updatePointerMotion);
+    }
   }
 
-  function updatePointerMotion() {
+  function updatePointerMotion(time) {
     pointerFrame = 0;
+    const dt = cursorGravity.time ? Math.min((time - cursorGravity.time) / 1000, .05) : 1 / 60;
+    cursorGravity.time = time;
     const active = state.motion && pointerQuery.matches && pointerPosition && !$$('dialog[open]').length;
     const home = active && state.screen === 'home';
     document.body.style.setProperty('--pointer-x', `${home ? (pointerPosition.x / window.innerWidth * 2 - 1).toFixed(3) : 0}px`);
     document.body.style.setProperty('--pointer-y', `${home ? (pointerPosition.y / window.innerHeight * 2 - 1).toFixed(3) : 0}px`);
     const projectsActive = active && state.screen === 'projects';
-    for (const entry of $$('.song-entry')) {
+    if (projectsActive) {
+      cursorGravity.y ??= pointerPosition.y;
+      // A time-weighted average filters quick flicks equally at any frame rate.
+      cursorGravity.y += (pointerPosition.y - cursorGravity.y) * (1 - Math.exp(-dt / .32));
+      if (Math.abs(pointerPosition.y - cursorGravity.y) < .1) cursorGravity.y = pointerPosition.y;
+    }
+    const targetStrength = projectsActive ? 1 : 0;
+    cursorGravity.strength += (targetStrength - cursorGravity.strength) * (1 - Math.exp(-dt / .24));
+    if (Math.abs(targetStrength - cursorGravity.strength) < .001) cursorGravity.strength = targetStrength;
+    if (!state.motion || !pointerQuery.matches || state.screen !== 'projects') {
+      cursorGravity.y = null;
+      cursorGravity.strength = 0;
+    }
+    const entries = $$('.song-entry').map(entry => {
       const card = entry.querySelector('.song-card').getBoundingClientRect();
-      const distance = projectsActive ? Math.abs(pointerPosition.y - (card.top + card.height / 2)) : Infinity;
-      const proximity = Math.max(0, 1 - distance / 240);
-      entry.style.setProperty('--cursor-offset', `${(-30 * proximity * proximity).toFixed(2)}px`);
+      const distance = cursorGravity.y === null ? Infinity : Math.abs(cursorGravity.y - (card.top + card.height / 2));
+      const proximity = Math.max(0, 1 - distance / 320);
+      const pull = (1 - Math.cos(Math.PI * proximity)) / 2;
+      return { entry, offset: -Math.min(88, window.innerWidth * .061) * pull * cursorGravity.strength };
+    });
+    for (const { entry, offset } of entries) entry.style.setProperty('--cursor-offset', `${offset.toFixed(2)}px`);
+    if (cursorGravity.strength !== targetStrength || (projectsActive && cursorGravity.y !== pointerPosition.y)) {
+      pointerFrame = requestAnimationFrame(updatePointerMotion);
+    } else if (!projectsActive) {
+      cursorGravity.y = null;
     }
   }
 

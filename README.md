@@ -32,7 +32,7 @@ Edit project titles, descriptions, credits, and image paths in `projects.js`. Pe
 - Press **P** for projects, **A** for about, and **Esc** to go back.
 - Use the arrow keys to move through selections, **/** to search, and **F2** for a random project.
 - Press **Enter** on a selected project to open its case study. Mouse and touch controls are also available.
-- Move the pointer anywhere over the project screen to fan the cards, with the selected project protruding furthest. Move it across the home scene to shift the parallax layers.
+- Move the pointer anywhere over the project screen to fan the cards. The stack rests further right, with a stronger selected-project peak and a deeper cursor pull that follows a running average of the pointer's height. Move it across the home scene to shift the parallax layers.
 - The home circle uses a one-second bouncy pulse, and project previews fade as the selection changes. Screenshots download and decode in the background when the menu opens, or earlier during idle time on an unrestricted connection.
 - Motion is on by default. Use the motion toggle to reduce animation; your choice is remembered.
 

@@ -16,6 +16,14 @@ body{isolation:isolate}#main-content{min-height:calc(100vh - 86px);padding-botto
 .topbar{background:transparent}
 
 /* Pointer movement uses separate translation so menu and card transforms remain intact. */
+@media(min-width:801px){
+  .song-entry{
+    --list-offset:clamp(36px,4.5vw,72px);
+    transform:translateX(calc(var(--list-offset) + var(--selection-offset,0px) + var(--cursor-offset,0px) * var(--cursor-scale,1)));
+    transition:transform .28s ease-out;
+  }
+  .song-entry.selected{--selection-offset:clamp(-108px,-6.75vw,-64px);--cursor-scale:.35}
+}
 .home-stage{translate:calc(var(--pointer-x,0px) * 9) calc(var(--pointer-y,0px) * 7);transition:translate .18s ease-out}
 .site-background,.world-image{translate:calc(var(--pointer-x,0px) * -16) calc(var(--pointer-y,0px) * -12)}
 .world-pattern{translate:calc(var(--pointer-x,0px) * -9) calc(var(--pointer-y,0px) * -7);transition:translate .18s ease-out}
