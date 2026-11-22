@@ -1,0 +1,32 @@
+/* WhiteCat's centred cursor at 0.7x (128 * .7, rounded to 90 device-independent pixels). */
+@media (hover: hover) and (pointer: fine) {
+  html.whitecat-cursor,
+  html.whitecat-cursor * {
+    cursor: var(--whitecat-cursor, url('assets/whitecat/cursor-0.7x.png') 45 45), auto;
+  }
+
+  html.whitecat-cursor :is(input:not([type='button']):not([type='submit']), textarea, [contenteditable='true']) {
+    cursor: text;
+  }
+}
+
+.whitecat-trail {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.whitecat-trail::backdrop {
+  background: transparent;
+  pointer-events: none;
+}
