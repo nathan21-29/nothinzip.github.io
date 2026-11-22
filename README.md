@@ -1,6 +1,6 @@
 # Nathan Chan — portfolio
 
-A local, offline portfolio inspired by osu!stable’s interface. It is a static site and needs no dependency installation.
+A static portfolio inspired by osu!stable's interface. It needs no dependency installation. The portfolio works offline; optional live osu! stats use a separate Cloudflare Worker.
 
 This entire `nathan-portfolio` folder is the repository root. Everything required to run the site is included inside it.
 
@@ -29,6 +29,12 @@ Push the contents of this folder to your website repository. `index.html`, `styl
 In the repository's **Settings > Pages**, choose **Deploy from a branch**, then **main** and **/ (root)**. Once that setting is in place, pushing to `main` updates the site. No build command, npm installation, or running server is needed on GitHub Pages. The included `.nojekyll` file keeps it a plain static site.
 
 Edit project titles, descriptions, credits, and image paths in `projects.js`. Personal text and links are in `index.html`, and visual styles are in `styles.css`.
+
+## Live osu! stats
+
+The header can display osu!standard level, level progress, and pp through a separate Cloudflare Worker. Follow [the setup instructions](workers/osu-stats/README.md). The site sends no stats request until the Worker's public URL is configured in `index.html`.
+
+The rectangular player button keeps its About-page navigation and displays Nathan's osu! avatar, the name Nathan Chan in Aller, performance points, and a level bar. Unavailable stats use dashes until the first successful response. Aller is bundled with its original archive and licence in `assets/fonts/aller/`.
 
 ## Controls
 

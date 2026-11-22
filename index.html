@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="cursor.css">
   <script src="projects.js" defer></script>
   <script src="app.js" defer></script>
+  <script id="osu-stats-script" src="osu-stats.js" data-endpoint="https://nathan-osu-stats.oofey123.workers.dev/stats" defer></script>
   <script src="cursor.js" defer></script>
 </head>
 <body data-screen="home">
@@ -22,9 +23,9 @@
     <div class="floating-shapes" id="floating-shapes"></div>
   </div>
   <header class="topbar">
-    <button class="profile" data-go="about" aria-label="About Nathan Chan">
-      <span class="profile-avatar">nc<span>!</span></span>
-      <span class="profile-copy"><strong>Nathan Chan</strong><span>Computer Engineering <span class="profile-divider">/</span> Waterloo</span><span class="profile-progress" aria-hidden="true"><i></i></span></span>
+    <button class="profile player-card" data-go="about" aria-label="About Nathan Chan" aria-describedby="osu-stats">
+      <span class="profile-avatar" aria-hidden="true"><span class="profile-initials">nc!</span><img id="osu-avatar" src="https://a.ppy.sh/18855821" alt="" width="64" height="64" decoding="async" referrerpolicy="no-referrer"></span>
+      <span class="profile-copy"><strong>Nathan Chan</strong><span class="profile-performance">Performance: <span id="osu-pp">— pp</span></span><span class="profile-level-row"><span id="osu-level">Lv—</span><span class="profile-progress" aria-hidden="true"><i></i></span></span><span class="visually-hidden" id="osu-stats" hidden></span></span>
     </button>
   </header>
 
