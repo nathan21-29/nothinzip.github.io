@@ -64,7 +64,7 @@ check('Main menu has the two requested destinations', () => {
 });
 check('The menu pulse uses the one-second bouncy cycle', () => {
   assert.match(css, /animation:heartbeat\s+1s\s+linear\s+infinite/);
-  assert.match(css, /@keyframes heartbeat\{0%\{transform:scale\(1\)\}72%\{transform:scale\(1\.035\)\}82%\{transform:scale\(\.992\)\}91%\{transform:scale\(1\.008\)\}100%\{transform:scale\(1\)\}\}/);
+  assert.match(css, /@keyframes heartbeat\{0%\{transform:scale\(1\)\}72%\{transform:scale\(1\.0105\)\}82%\{transform:scale\(\.9976\)\}91%\{transform:scale\(1\.0024\)\}100%\{transform:scale\(1\)\}\}/);
 });
 check('Reduced-motion handling and preference control are present', () => { assert.match(css, /prefers-reduced-motion/); assert.match(app, /nathan-motion/); assert.match(html, /id="motion-toggle"/); });
 check('Case study and image viewer are real labelled dialogs', () => { assert.match(html, /<dialog[^>]+id="case-study-dialog"[^>]+aria-labelledby=/); assert.match(html, /<dialog[^>]+id="lightbox"[^>]+aria-label=/); });

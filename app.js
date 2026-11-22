@@ -54,11 +54,10 @@
     const home = active && state.screen === 'home';
     document.body.style.setProperty('--pointer-x', `${home ? (pointerPosition.x / window.innerWidth * 2 - 1).toFixed(3) : 0}px`);
     document.body.style.setProperty('--pointer-y', `${home ? (pointerPosition.y / window.innerHeight * 2 - 1).toFixed(3) : 0}px`);
-    const library = $('.project-library').getBoundingClientRect();
-    const inLibrary = active && state.screen === 'projects' && pointerPosition.x >= library.left - 48 && pointerPosition.x <= library.right && pointerPosition.y >= library.top && pointerPosition.y <= library.bottom;
+    const projectsActive = active && state.screen === 'projects';
     for (const entry of $$('.song-entry')) {
       const card = entry.querySelector('.song-card').getBoundingClientRect();
-      const distance = inLibrary ? Math.abs(pointerPosition.y - (card.top + card.height / 2)) : Infinity;
+      const distance = projectsActive ? Math.abs(pointerPosition.y - (card.top + card.height / 2)) : Infinity;
       const proximity = Math.max(0, 1 - distance / 240);
       entry.style.setProperty('--cursor-offset', `${(-30 * proximity * proximity).toFixed(2)}px`);
     }
