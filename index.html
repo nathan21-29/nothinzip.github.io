@@ -23,10 +23,13 @@
     <div class="floating-shapes" id="floating-shapes"></div>
   </div>
   <header class="topbar">
+    <div class="profile-panel">
     <button class="profile player-card" data-go="about" aria-label="About Nathan Chan" aria-describedby="osu-stats">
       <span class="profile-avatar" aria-hidden="true"><span class="profile-initials">nc!</span><img id="osu-avatar" src="https://a.ppy.sh/18855821" alt="" width="64" height="64" decoding="async" referrerpolicy="no-referrer"></span>
       <span class="profile-copy"><strong>Nathan Chan</strong><span class="profile-performance">Performance: <span id="osu-pp">— pp</span></span><span class="profile-level-row"><span id="osu-level">Lv—</span><span class="profile-progress" aria-hidden="true"><i></i></span></span><span class="visually-hidden" id="osu-stats" hidden></span></span>
     </button>
+    <p class="profile-dropdown" id="profile-dropdown" hidden>Looking for my Osu! profile? Click <a href="https://osu.ppy.sh/users/18855821" target="_blank" rel="noreferrer">here</a></p>
+    </div>
   </header>
 
   <main id="main-content" tabindex="-1">
@@ -37,14 +40,15 @@
           <button class="menu-entry projects-entry" data-go="projects"><span class="menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H3v16h18V8H8Z"/><path d="M3 8h18M8 4v4"/></svg></span><span><strong>projects</strong><small>choose something I've built</small></span><kbd>P</kbd></button>
           <button class="menu-entry about-entry" data-go="about"><span class="menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><span><strong>about me</strong><small>the person behind the projects</small></span><kbd>A</kbd></button>
         </nav>
-        <div class="cookie-anchor">
+        <div class="cookie-anchor spectrum-layer" aria-hidden="true">
           <div class="cookie-spectrum" id="cookie-spectrum" aria-hidden="true"></div>
+        </div>
+        <div class="cookie-anchor">
           <div class="cookie-halo" aria-hidden="true"></div>
           <div class="cookie-pulse">
             <button class="cookie" id="main-cookie" aria-label="Open main menu" aria-expanded="false" aria-controls="main-menu">
               <span class="cookie-facets" aria-hidden="true"></span>
               <span class="cookie-word">nathan<span>!</span></span>
-              <span class="cookie-caption" id="cookie-caption">CLICK TO EXPLORE</span>
             </button>
           </div>
         </div>
@@ -52,8 +56,7 @@
       <p class="home-tip" id="home-tip"><span class="tip-dot"></span>Click the circle. There's more on the other side.<span class="tip-key"><kbd>Enter</kbd> works, too</span></p>
     </section>
 
-    <section class="screen projects-screen" id="projects-screen" aria-labelledby="project-select-heading" hidden>
-      <div class="select-heading"><div><span class="eyebrow">PROJECT SELECT</span><h1 id="project-select-heading">Choose your next curiosity.</h1></div><span class="library-count"><strong>04</strong> projects in the collection</span></div>
+    <section class="screen projects-screen" id="projects-screen" aria-label="Projects" hidden>
       <div class="project-layout">
         <section class="project-preview" aria-label="Selected project overview" id="project-preview"></section>
         <section class="project-library" aria-label="Project library">

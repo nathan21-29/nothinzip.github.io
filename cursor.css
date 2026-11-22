@@ -1,12 +1,17 @@
 /* WhiteCat's centred cursor at 0.7x (128 * .7, rounded to 90 device-independent pixels). */
 @media (hover: hover) and (pointer: fine) {
   html.whitecat-cursor,
-  html.whitecat-cursor * {
-    cursor: var(--whitecat-cursor, url('assets/whitecat/cursor-0.7x.png') 45 45), auto;
+  html.whitecat-cursor *,
+  html.whitecat-cursor::before,
+  html.whitecat-cursor::after,
+  html.whitecat-cursor *::before,
+  html.whitecat-cursor *::after {
+    /* The visual layer draws the skin, including at viewport edges. */
+    cursor: none !important;
   }
 
-  html.whitecat-cursor :is(input:not([type='button']):not([type='submit']), textarea, [contenteditable='true']) {
-    cursor: text;
+  html.whitecat-cursor :is(input:not([type='button']):not([type='submit']), textarea, [contenteditable='true'], [contenteditable='true'] *) {
+    cursor: text !important;
   }
 }
 

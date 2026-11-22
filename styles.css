@@ -11,6 +11,22 @@ body{isolation:isolate}#main-content{min-height:calc(100vh - 5.375rem);padding-b
 /* Keep the circle spectrum outside its rim and its labels readable. */
 .profile-avatar{display:flex;align-items:center;justify-content:center;line-height:1}
 .cookie-spectrum{inset:-20%;border:0}
+/* Keep the orbit behind the menu while the circle stays in front. */
+.cookie-anchor.spectrum-layer{z-index:1;pointer-events:none}
+.main-menu{z-index:2}
+.cookie-spectrum svg{animation:spectrumOrbit 48s linear infinite;transform-origin:50% 50%}
+.cookie-spectrum line{
+  transform-box:view-box;
+  transform-origin:300px 79px;
+  animation:spectrumDance var(--bar-duration,1.5s) ease-in-out var(--bar-delay,0s) infinite;
+}
+@keyframes spectrumOrbit{to{transform:rotate(-360deg)}}
+@keyframes spectrumDance{
+  0%,100%{transform:scaleY(.35);opacity:calc(var(--bar-opacity,.4) * .65)}
+  24%{transform:scaleY(1.18);opacity:var(--bar-opacity,.4)}
+  48%{transform:scaleY(.55);opacity:calc(var(--bar-opacity,.4) * .8)}
+  72%{transform:scaleY(.92);opacity:var(--bar-opacity,.4)}
+}
 .home-heading{z-index:4;pointer-events:none}
 .home-tip{z-index:5;padding:0.5rem 1.125rem;background:rgba(24,15,25,.64);border-radius:1.875rem;backdrop-filter:blur(0.375rem)}
 .topbar{background:transparent}
@@ -139,3 +155,38 @@ html:has(body[data-screen="projects"]){overscroll-behavior-y:none}
 @media(min-height:37.5625rem) and (max-width:35rem){
   .screen,.home-screen{min-height:calc(100vh - 6.5rem)}
 }
+
+/* Keep the player panel anchored while its profile link drops into view. */
+.profile-panel{width:fit-content;max-width:100%;position:relative}
+.profile-dropdown{margin:.625rem .75rem 0;font-family:Aller,'Trebuchet MS',sans-serif;font-size:1rem;line-height:1.5;animation:profileDropdown .4s ease-out both}
+.profile-dropdown a{color:var(--pink);text-decoration:underline;text-underline-offset:.18em}
+body[data-screen="about"] .topbar{height:calc(var(--player-header-height) + 3.75rem)}
+body[data-screen="about"] .about-screen{min-height:calc(100svh - var(--profile-top-space,11rem))}
+body[data-screen="about"] .screen.entering,body[data-screen="projects"] .screen.entering{animation-timing-function:ease-out}
+@keyframes profileDropdown{from{opacity:0;transform:translateY(-.875rem)}to{opacity:1;transform:translateY(0)}}
+.reduced-motion .profile-dropdown{animation:none}
+@media(prefers-reduced-motion:reduce){body:not(.motion-enabled) .profile-dropdown{animation:none}}
+@media(max-width:35rem){body[data-screen="about"]{--profile-top-space:10.25rem}}
+
+/* Project select stays within the viewport; only the card list moves. */
+body[data-screen="projects"]{overflow:hidden}
+body[data-screen="projects"] .topbar{position:fixed;top:0;left:0;z-index:15}
+body[data-screen="projects"] #main-content{height:100svh;min-height:0}
+body[data-screen="projects"] .projects-screen{height:100svh;min-height:0;padding:0 3vw 3.875rem 6vw;overflow:hidden}
+body[data-screen="projects"] .project-layout{height:100%;min-height:0;grid-template-columns:minmax(0,1fr) minmax(23.75rem,.85fr);gap:5vw}
+body[data-screen="projects"] .project-preview{padding-top:9rem;min-height:0;overflow:hidden}
+body[data-screen="projects"] .project-library{display:flex;flex-direction:column;min-width:0;min-height:0;padding-top:.75rem}
+body[data-screen="projects"] .library-tools,body[data-screen="projects"] .collection-tabs,body[data-screen="projects"] .library-hint{flex:none}
+body[data-screen="projects"] .song-list{display:block;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:.4rem 0 4rem 1rem;margin-left:0;margin-right:-3vw;scrollbar-width:none;mask-image:linear-gradient(to bottom,#000 calc(100% - 5rem),transparent 100%)}
+/* Keep the selection and cursor pull inside the list, with room for the skewed edge. */
+body[data-screen="projects"] .song-entry{transform:translateX(max(0rem,calc(var(--list-offset,0rem) + var(--selection-offset,0rem) + var(--cursor-offset,0rem) * var(--cursor-scale,1))))}
+body[data-screen="projects"] .song-entry+ .song-entry{margin-top:.5625rem}
+body[data-screen="projects"] .library-hint{position:relative;margin:0;padding:.5rem 0 .35rem}
+@media(max-width:50rem){
+  body[data-screen="projects"] .projects-screen{padding:7.25rem 1.25rem 3.875rem}
+  body[data-screen="projects"] .project-layout{display:flex;flex-direction:column;gap:0}
+  body[data-screen="projects"] .project-preview{display:none}
+  body[data-screen="projects"] .project-library{flex:1;min-height:0;padding-top:.5rem}
+  body[data-screen="projects"] .song-list{margin-right:-1.25rem}
+}
+@media(max-width:35rem){body[data-screen="projects"] .projects-screen{padding-top:6.5rem}}

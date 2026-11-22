@@ -19,7 +19,7 @@
   const cursorImage = new Image();
   const trailImage = new Image();
   const assetBase = new URL('assets/whitecat/', document.currentScript.src);
-  // Native cursor images keep pointer movement independent of animation frames.
+  // Draw the cursor alongside its trail so native hover/edge fallbacks cannot appear.
   // Even dimensions keep every frame's hotspot exactly centred.
   const pressFrames = Array.from({ length: 10 }, (_, index) => {
     const size = 90 + index * 2;
@@ -32,6 +32,7 @@
   let frame = 0;
   let lastSample = -Infinity;
   let lastPosition = null;
+  let pointerPosition = null;
   let points = [];
   let pressed = false;
   let pressFrame = 0;
@@ -56,16 +57,15 @@
     points = [];
     lastPosition = null;
     lastSample = -Infinity;
-    context.clearRect(0, 0, innerWidth, innerHeight);
+    render(performance.now());
   }
 
   function applyCursorScale(scale) {
     const index = Math.max(0, Math.min(pressFrames.length - 1,
       Math.round((scale - 1) / (PRESS_SCALE - 1) * (pressFrames.length - 1))));
     if (index === cursorFrameIndex) return;
-    const { image, size } = pressFrames[index];
-    root.style.setProperty('--whitecat-cursor', `url("${image.src}") ${size / 2} ${size / 2}`);
     cursorFrameIndex = index;
+    render(performance.now());
   }
 
   function currentPressScale(time) {
@@ -103,6 +103,7 @@
   }
 
   function resetPointer() {
+    pointerPosition = null;
     clearTrail();
     pressed = false;
     cancelAnimationFrame(pressFrame);
@@ -125,6 +126,7 @@
     // can hide the trail even when its visible control says "Motion on".
     enabled = imagesReady && finePointer.matches && !document.body.classList.contains('reduced-motion');
     root.classList.toggle('whitecat-cursor', imagesReady && finePointer.matches);
+    if (!finePointer.matches) pointerPosition = null;
     if (!enabled) {
       clearTrail();
       cancelAnimationFrame(pressFrame);
@@ -135,8 +137,7 @@
     }
   }
 
-  function draw(time) {
-    frame = 0;
+  function render(time) {
     context.clearRect(0, 0, innerWidth, innerHeight);
     points = points.filter(point => time - point.time < FADE_DURATION);
     for (const point of points) {
@@ -146,19 +147,34 @@
       context.drawImage(trailImage, point.x - TRAIL_SIZE / 2, point.y - TRAIL_SIZE / 2, TRAIL_SIZE, TRAIL_SIZE);
     }
     context.globalAlpha = 1;
+    if (imagesReady && finePointer.matches && pointerPosition) {
+      const { image, size } = pressFrames[Math.max(0, cursorFrameIndex)];
+      const sprite = image.complete && image.naturalWidth ? image : cursorImage;
+      context.drawImage(sprite, pointerPosition.x - size / 2, pointerPosition.y - size / 2, size, size);
+    }
+  }
+
+  function draw(time) {
+    frame = 0;
+    render(time);
     if (points.length) frame = requestAnimationFrame(draw);
   }
 
   document.addEventListener('pointermove', event => {
-    if (event.pointerType !== 'mouse') { clearTrail(); return; }
+    if (event.pointerType !== 'mouse') { pointerPosition = null; clearTrail(); return; }
     // Also recover if Mouse1 was released outside the window.
     if (typeof event.buttons === 'number' && imagesReady && finePointer.matches) setPressed(Boolean(event.buttons & 1));
-    if (!enabled || document.hidden) return;
-    if (event.target.closest?.('input, textarea, select, [contenteditable="true"]')) {
+    if (document.hidden || !imagesReady || !finePointer.matches) return;
+    if (event.target.closest?.('input:not([type="button"]):not([type="submit"]), textarea, [contenteditable="true"]')) {
+      pointerPosition = null;
       clearTrail();
       return;
     }
     const time = performance.now();
+    pointerPosition = { x: event.clientX, y: event.clientY };
+    // Update on every pointer event, independently of the trail's 60 Hz sampling.
+    render(time);
+    if (!enabled) return;
     if (lastPosition?.x === event.clientX && lastPosition?.y === event.clientY) return;
     if (time - lastSample < SAMPLE_INTERVAL - .01) return;
     // Skip missed samples rather than interpolating a continuous trail across a fast flick.

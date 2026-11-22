@@ -16,6 +16,8 @@
   };
   let navigationId = 0;
   let pendingScreen = null;
+  let screenExitAnimations = [];
+  let footerEntryAnimations = [];
   let previouslyFocused;
   const closingDialogs = new WeakSet();
   let pointerFrame = 0;
@@ -118,7 +120,7 @@
       stopProjectPageScroll();
       return false;
     }
-    const page = document.scrollingElement;
+    const page = $('#song-list');
     if (!page) return false;
     const bottom = Math.max(0, page.scrollHeight - page.clientHeight);
     const previousTarget = projectPageScroll.frame ? projectPageScroll.target : page.scrollTop;
@@ -148,7 +150,7 @@
   }
 
   function springProjectPageScroll(time) {
-    const page = document.scrollingElement;
+    const page = $('#song-list');
     if (!page || !state.motion || state.screen !== 'projects') { stopProjectPageScroll(); return; }
     const dt = projectPageScroll.time ? Math.min((time - projectPageScroll.time) / 1000, .05) : 1 / 60;
     projectPageScroll.time = time;
@@ -162,7 +164,7 @@
     projectPageScroll.velocity = (projectPageScroll.velocity - 16 * carry * dt) * decay;
     const settled = Math.abs(projectPageScroll.target - projectPageScroll.position) < .25 && Math.abs(projectPageScroll.velocity) < 2;
     if (settled) projectPageScroll.position = projectPageScroll.target;
-    window.scrollTo({ top: projectPageScroll.position, behavior: 'instant' });
+    page.scrollTop = projectPageScroll.position;
     // A trackpad gesture may finish before its eased movement reaches the edge.
     if (projectPageScroll.edgeDelta && Math.abs(projectPageScroll.target - projectPageScroll.position) < 1) {
       pullProjectScroll(projectPageScroll.edgeDelta);
@@ -201,7 +203,7 @@
   function stretchProjectScroll(event, delta) {
     if (!state.motion || pendingScreen || state.screen !== 'projects' || !delta || $$('dialog[open]').length) return;
     if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
-    const page = document.scrollingElement;
+    const page = $('#song-list');
     if (!page) return;
     const bottom = Math.max(0, page.scrollHeight - page.clientHeight);
     const atEdge = delta < 0 ? page.scrollTop <= 1 : page.scrollTop >= bottom - 1;
@@ -244,6 +246,8 @@
     if (persist) savePreference('nathan-motion', enabled ? 'on' : 'off');
     queuePointerMotion();
     if (!enabled) {
+      footerEntryAnimations.forEach(animation => animation.cancel());
+      footerEntryAnimations = [];
       resetProjectScroll();
       if (pendingScreen) {
         ++navigationId;
@@ -263,7 +267,6 @@
     $('#main-menu').inert = !state.menuOpen || state.screen !== 'home';
     $('#main-cookie').setAttribute('aria-expanded', String(state.menuOpen));
     $('#main-cookie').setAttribute('aria-label', state.menuOpen ? 'Open projects' : 'Open main menu');
-    $('#cookie-caption').textContent = state.menuOpen ? 'PICK YOUR NEXT STOP' : 'CLICK TO EXPLORE';
     $('#home-tip').innerHTML = state.menuOpen
       ? '<span class="tip-dot"></span>Click the circle again for projects.<span class="tip-key"><kbd>Enter</kbd> to continue · <kbd>Esc</kbd> to close</span>'
       : '<span class="tip-dot"></span>Click the circle. There\'s more on the other side.<span class="tip-key"><kbd>Enter</kbd> works, too</span>';
@@ -298,7 +301,8 @@
     else loadImage(project.image).then(show);
   }
 
-  function applyScreen(screen, focus = true) {
+  function applyScreen(screen, focus = true, animateFooter = false) {
+    clearScreenExit();
     resetProjectScroll();
     state.screen = screen;
     pointerPosition = null;
@@ -311,6 +315,7 @@
       $('#project-preview').inert = false;
     }
     document.body.dataset.screen = screen;
+    $('#profile-dropdown').hidden = screen !== 'about';
     for (const name of ['home', 'projects', 'about']) $(`#${name}-screen`).hidden = name !== screen;
     $('#back-button').hidden = screen === 'home';
     $('#signature').hidden = screen !== 'home';
@@ -323,9 +328,14 @@
     document.title = `Nathan Chan · ${screen === 'projects' ? 'project select' : screen === 'about' ? 'about me' : 'a few things I’ve made'}`;
     const panel = $(`#${screen}-screen`);
     panel.classList.remove('entering');
-    requestAnimationFrame(() => panel.classList.add('entering'));
+    const currentNavigation = navigationId;
+    if (animateFooter && state.motion) footerEntryAnimations = animateFooterContents(true);
+    requestAnimationFrame(() => {
+      if (currentNavigation !== navigationId || screen !== state.screen) return;
+      panel.classList.add('entering');
+    });
     if (focus) {
-      const target = screen === 'home' ? $('#main-cookie') : panel.querySelector('h1');
+      const target = screen === 'home' ? $('#main-cookie') : panel.querySelector('h1') || panel;
       if (screen !== 'home') target.setAttribute('tabindex', '-1');
       target.focus({ preventScroll: true });
       $('#main-content').scrollTop = 0;
@@ -333,26 +343,72 @@
     }
   }
 
+  function animateFooterContents(entering) {
+    return $$('.bottom-bar > :not([hidden])').map(element => {
+      const distance = Math.max(0, window.innerHeight - element.getBoundingClientRect().top) + 16;
+      const resting = { translate: '0 0' };
+      const belowScreen = { translate: `0 ${distance}px` };
+      // Separate translation preserves the toolbar's mobile centering transform.
+      return element.animate(entering ? [belowScreen, resting] : [resting, belowScreen], {
+        duration: entering ? 520 : 420,
+        easing: 'cubic-bezier(.16, 1, .3, 1)',
+        fill: entering ? 'none' : 'forwards'
+      });
+    });
+  }
+
+  function clearScreenExit() {
+    footerEntryAnimations.forEach(animation => animation.cancel());
+    footerEntryAnimations = [];
+    screenExitAnimations.forEach(animation => animation.cancel());
+    screenExitAnimations = [];
+    $$('.screen,.bottom-bar,#profile-dropdown').forEach(element => { element.inert = false; });
+  }
+
   function navigate(screen, { push = true } = {}) {
     if (!['home', 'projects', 'about'].includes(screen)) return;
     if (pendingScreen === screen) return;
     if (screen === 'projects') preloadProjectImages();
     const id = ++navigationId;
+    clearScreenExit();
     if (push && location.hash !== `#${screen}`) {
       try { history.pushState({ screen }, '', `#${screen}`); } catch { /* Works directly from a local file too. */ }
     }
     if (screen === state.screen) { pendingScreen = null; $('#transition-wipe').classList.remove('is-active'); return; }
     if (screen === 'home') state.menuOpen = true;
     const wipe = $('#transition-wipe');
-    if (!state.motion) { applyScreen(screen); return; }
+    if (!state.motion) { pendingScreen = null; wipe.classList.remove('is-active'); applyScreen(screen); return; }
     pendingScreen = screen;
-    wipe.classList.add('is-active');
-    setTimeout(() => {
-      if (id !== navigationId) return;
-      pendingScreen = null;
-      applyScreen(screen);
-      requestAnimationFrame(() => { if (id === navigationId) wipe.classList.remove('is-active'); });
-    }, 280);
+    const footer = $('.bottom-bar');
+    if (footer.contains(document.activeElement)) $('.profile').focus({ preventScroll: true });
+    footer.inert = true;
+    screenExitAnimations = animateFooterContents(false);
+    {
+      wipe.classList.remove('is-active');
+      const outgoing = $(`#${state.screen}-screen`);
+      outgoing.classList.remove('entering');
+      const elements = [outgoing];
+      const dropdown = $('#profile-dropdown');
+      if (state.screen === 'about') elements.push(dropdown);
+      if (elements.some(element => element.contains(document.activeElement))) $('.profile').focus({ preventScroll: true });
+      // Fade the menu into the air with a short lift, keeping the player panel in place.
+      screenExitAnimations.push(...elements.map(element => {
+        element.inert = true;
+        const isDropdown = element === dropdown;
+        const currentStyle = isDropdown ? getComputedStyle(element) : null;
+        return element.animate([
+          { transform: currentStyle?.transform || 'translateY(0)', opacity: currentStyle?.opacity ?? 1, zIndex: 4 },
+          { transform: isDropdown ? 'translateY(-.875rem)' : 'translateY(-2.5rem)', opacity: 0, zIndex: 4 }
+        ], { duration: 420, easing: isDropdown ? 'ease-out' : 'cubic-bezier(.16,1,.3,1)', fill: 'forwards' });
+      }));
+      Promise.all(screenExitAnimations.map(animation => animation.finished)).then(() => {
+        if (id !== navigationId) return;
+        pendingScreen = null;
+        applyScreen(screen, true, true);
+      }).catch(() => { /* A new navigation or reduced motion cancelled the exit. */ });
+      return;
+    }
+
   }
 
   function loadImage(src) {
@@ -465,7 +521,6 @@
     $('#launch-project').disabled = !list.length;
     $('#show-case-study').disabled = !list.length;
     $('#random-project').disabled = !list.length;
-    $('.library-count').innerHTML = `<strong>${String(list.length).padStart(2, '0')}</strong> ${list.length === 1 ? 'project' : 'projects'} in the collection`;
     updateBackdrop();
     queuePointerMotion();
   }
@@ -491,7 +546,16 @@
     if (focus) {
       const card = $(`[data-project="${id}"] .song-card`);
       card?.focus({ preventScroll: true });
-      card?.scrollIntoView({ block: 'nearest', behavior: state.motion ? 'smooth' : 'auto' });
+      // Scroll only the list vertically; skewed/translated cards can otherwise
+      // make scrollIntoView shift the clipped list and the entire page sideways.
+      if (card) {
+        const list = $('#song-list');
+        const bounds = list.getBoundingClientRect();
+        const cardBounds = card.getBoundingClientRect();
+        const delta = cardBounds.top < bounds.top ? cardBounds.top - bounds.top
+          : cardBounds.bottom > bounds.bottom ? cardBounds.bottom - bounds.bottom : 0;
+        if (delta) list.scrollTo({ top: list.scrollTop + delta, behavior: state.motion ? 'smooth' : 'auto' });
+      }
     }
   }
 
@@ -569,23 +633,23 @@
   $('#project-search').addEventListener('input', event => { state.query = event.target.value; renderProjects(); });
   $('#project-sort').addEventListener('change', event => { state.sort = event.target.value; renderProjects(); });
   document.addEventListener('wheel', event => {
-    if (state.screen !== 'projects' || event.ctrlKey || event.defaultPrevented || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    if (!event.target.closest('#song-list') || state.screen !== 'projects' || event.ctrlKey || event.defaultPrevented || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
     const delta = event.deltaY * unit;
     if (!smoothProjectWheel(event, delta)) stretchProjectScroll(event, delta);
   }, { passive: false });
-  $('#projects-screen').addEventListener('touchstart', event => {
+  $('#song-list').addEventListener('touchstart', event => {
     resetProjectScroll();
     projectScroll.touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
   }, { passive: true });
-  $('#projects-screen').addEventListener('touchmove', event => {
+  $('#song-list').addEventListener('touchmove', event => {
     if (event.touches.length !== 1 || projectScroll.touchY === null) { releaseProjectScroll(); return; }
     const y = event.touches[0].clientY;
     const delta = projectScroll.touchY - y;
     projectScroll.touchY = y;
     stretchProjectScroll(event, delta);
   }, { passive: false });
-  for (const type of ['touchend', 'touchcancel']) $('#projects-screen').addEventListener(type, releaseProjectScroll, { passive: true });
+  for (const type of ['touchend', 'touchcancel']) $('#song-list').addEventListener(type, releaseProjectScroll, { passive: true });
   document.addEventListener('pointermove', event => {
     if (event.pointerType === 'touch' || !state.motion || !pointerQuery.matches) return;
     pointerPosition = { x: event.clientX, y: event.clientY };
@@ -659,8 +723,8 @@
 
   function onHistoryChange() {
     const screen = location.hash.slice(1);
-    if (['home', 'projects', 'about'].includes(screen) && screen !== state.screen) navigate(screen, { push: false });
-    if (!screen && state.screen !== 'home') navigate('home', { push: false });
+    if (['home', 'projects', 'about'].includes(screen) && (screen !== state.screen || pendingScreen)) navigate(screen, { push: false });
+    if (!screen && (state.screen !== 'home' || pendingScreen)) navigate('home', { push: false });
   }
   window.addEventListener('popstate', onHistoryChange);
   window.addEventListener('hashchange', onHistoryChange);
@@ -669,7 +733,9 @@
     for (let i = 0; i < 120; i++) {
       const angle = i * 3;
       const length = 9 + (Math.sin(i * 2.37) + 1) * 21 + (i % 7 === 0 ? 12 : 0);
-      lines += `<line x1="300" y1="79" x2="300" y2="${79 - length}" transform="rotate(${angle} 300 300)" style="--bar-delay:${-(i % 17) * 0.071}s;--bar-opacity:${0.1 + (i % 5) * 0.07}"/>`;
+      const duration = 1.1 + (i % 11) * 0.093;
+      const delay = -(i * 0.137 + Math.sin(i * 0.73) * 0.4);
+      lines += `<g transform="rotate(${angle} 300 300)"><line x1="300" y1="79" x2="300" y2="${79 - length}" style="--bar-duration:${duration}s;--bar-delay:${delay}s;--bar-opacity:${0.22 + (i % 5) * 0.07}"/></g>`;
     }
     $('#cookie-spectrum').innerHTML = `<svg viewBox="0 0 600 600" aria-hidden="true">${lines}</svg>`;
     $('#floating-shapes').innerHTML = Array.from({ length: 14 }, (_, i) => `<span style="--shape-x:${(i * 29 + 7) % 100}%;--shape-y:${(i * 37 + 11) % 100}%;--shape-size:${14 + (i % 5) * 8}px;--shape-duration:${18 + i % 9}s;--shape-delay:-${i * 2.1}s"></span>`).join('');
