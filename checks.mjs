@@ -9,11 +9,15 @@ const dist = root;
 const html = readFileSync(resolve(dist, 'index.html'), 'utf8');
 const app = readFileSync(resolve(dist, 'app.js'), 'utf8');
 const css = readFileSync(resolve(dist, 'styles.css'), 'utf8');
+const introCSS = readFileSync(resolve(dist, 'intro.css'), 'utf8');
 const data = readFileSync(resolve(dist, 'projects.js'), 'utf8');
 let count = 0;
 function check(name, test) { test(); count++; console.log(`PASS ${name}`); }
 
 check('Application JavaScript parses', () => new vm.Script(app));
+check('Startup and cursor JavaScript parse', () => {
+  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro.js', 'cursor.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
+});
 const context = { window: {} };
 vm.createContext(context);
 check('Project content JavaScript parses and runs', () => vm.runInContext(data, context));
@@ -51,7 +55,10 @@ check('All local HTML assets exist', () => {
   }
 });
 check('All stylesheet image assets exist', () => {
-  for (const [, path] of css.matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g)) assert.ok(existsSync(resolve(dist, path)), path);
+  for (const [, path] of (css + introCSS).matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g)) assert.ok(existsSync(resolve(dist, path)), path);
+});
+check('Startup skin assets exist', () => {
+  for (const file of ['cursor-0.7x.png', 'cursortrail@2x.png', 'approachcircle@2x.png', 'hitcircleoverlay@2x.png']) assert.ok(existsSync(resolve(dist, 'assets/whitecat', file)), file);
 });
 check('HTML IDs are unique', () => {
   const ids = Array.from(html.matchAll(/\bid="([^"]+)"/g), match => match[1]);

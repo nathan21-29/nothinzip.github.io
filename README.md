@@ -38,12 +38,17 @@ The rectangular player button keeps its About-page navigation and displays Natha
 
 ## Controls
 
+The first visit in each tab plays a silent 3.86-second osu!standard startup: three hit circles, a curved slider, and a fifth hit that grows into the actual menu circle. The intro uses the bundled WhiteCat cursor, trail, approach ring, and hit-circle overlay. Click or press **Enter** to skip; that input is consumed, so the menu stays closed. Tab, Escape, and Space also dismiss it. Reduced motion (the site preference or the system setting) uses a brief fade. Deep links go directly to their destination. Resizing, leaving the tab, or a failed animation restores the normal interface.
+
+For local review, open `http://127.0.0.1:4173/?intro=replay` to replay despite the session flag. Add `&introAt=1820` to hold a specific millisecond for up to the recovery deadline (4.8 seconds), or use `?intro=off` to bypass it. These switches only work on localhost or a directly opened file; production URLs cannot force a replay.
+
 - Click the circle or press **Enter** to open the main menu; repeat to enter Projects. **Esc** closes the menu.
 - Press **P** for projects, **A** for about, and **Esc** to go back.
 - Use the arrow keys to move through selections, **/** to search, and **F2** for a random project.
 - Press **Enter** on a selected project to open its case study. Mouse and touch controls are also available.
 - Move the pointer anywhere over the project screen to fan the cards. The stack rests further right, with a stronger selected-project peak and a deeper cursor pull that follows a running average of the pointer's height. Move it across the home scene to shift the parallax layers.
 - The home circle uses a one-second bouncy pulse, and project previews fade as the selection changes. Screenshots download and decode in the background when the menu opens, or earlier during idle time on an unrestricted connection.
+- During startup, a single scripted cursor makes curved, danser-inspired sweeps with continuous momentum through each hit. Its path joins the slider tangentially and settles exactly at the logo's center; it uses the same WhiteCat sprites and fading snapshots as the normal cursor.
 - Motion is on by default. Use the motion toggle to reduce animation; your choice is remembered.
 
 ## Project checks

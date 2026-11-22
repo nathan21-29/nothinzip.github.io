@@ -63,7 +63,7 @@
     pointerFrame = 0;
     const dt = cursorGravity.time ? Math.min((time - cursorGravity.time) / 1000, .05) : 1 / 60;
     cursorGravity.time = time;
-    const active = state.motion && pointerQuery.matches && pointerPosition && !$$('dialog[open]').length;
+    const active = !window.SiteIntro?.active && state.motion && pointerQuery.matches && pointerPosition && !$$('dialog[open]').length;
     const home = active && state.screen === 'home';
     document.body.style.setProperty('--pointer-x', `${home ? (pointerPosition.x / window.innerWidth * 2 - 1).toFixed(3) : 0}px`);
     document.body.style.setProperty('--pointer-y', `${home ? (pointerPosition.y / window.innerHeight * 2 - 1).toFixed(3) : 0}px`);
@@ -329,9 +329,11 @@
     const panel = $(`#${screen}-screen`);
     panel.classList.remove('entering');
     const currentNavigation = navigationId;
+    const introOwnsEntry = screen === 'home' && window.SiteIntro?.active;
     if (animateFooter && state.motion) footerEntryAnimations = animateFooterContents(true);
     requestAnimationFrame(() => {
       if (currentNavigation !== navigationId || screen !== state.screen) return;
+      if (introOwnsEntry) return;
       panel.classList.add('entering');
     });
     if (focus) {

@@ -5,6 +5,6 @@
   "description": "An osu!stable-inspired personal portfolio for Nathan Chan.",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node checks.mjs && node --check server.mjs && node --test tests/osu-stats.test.mjs"
+    "check": "node checks.mjs && node --check server.mjs && node --test tests/*.test.mjs"
   }
 }
