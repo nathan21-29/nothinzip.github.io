@@ -30,6 +30,7 @@
   const imageCache = new Map();
   let projectPreload;
   const projectScroll = { offset: 0, target: 0, velocity: 0, frame: 0, time: 0, touchY: null, releaseTimer: 0 };
+  const projectPageScroll = { position: 0, target: 0, velocity: 0, frame: 0, time: 0, edgeDelta: 0 };
   const background = document.createElement('div');
   background.className = 'site-background';
   $('.world').prepend(background);
@@ -94,10 +95,80 @@
   }
 
   function resetProjectScroll() {
+    stopProjectPageScroll();
     cancelAnimationFrame(projectScroll.frame);
     clearTimeout(projectScroll.releaseTimer);
     Object.assign(projectScroll, { offset: 0, target: 0, velocity: 0, frame: 0, time: 0, touchY: null, releaseTimer: 0 });
     $('#song-list').style.setProperty('--card-recoil', '0px');
+  }
+
+  function stopProjectPageScroll() {
+    cancelAnimationFrame(projectPageScroll.frame);
+    projectPageScroll.frame = 0;
+    projectPageScroll.velocity = 0;
+    projectPageScroll.time = 0;
+    projectPageScroll.edgeDelta = 0;
+  }
+
+  function smoothProjectWheel(event, delta) {
+    if (!state.motion || pendingScreen || state.screen !== 'projects' || !delta || $$('dialog[open]').length) return false;
+    if (!event.cancelable || event.target.closest('input,textarea,select,[contenteditable="true"]')) {
+      // Do not fight native trackpad momentum when the browser owns the gesture.
+      stopProjectPageScroll();
+      return false;
+    }
+    const page = document.scrollingElement;
+    if (!page) return false;
+    const bottom = Math.max(0, page.scrollHeight - page.clientHeight);
+    const previousTarget = projectPageScroll.frame ? projectPageScroll.target : page.scrollTop;
+    const target = Math.max(0, Math.min(bottom, previousTarget + delta));
+    const overscroll = previousTarget + delta - target;
+    if (target === previousTarget) {
+      // Recoil takes over once the page actually reaches the end of its travel.
+      if (!projectPageScroll.frame || (delta < 0 ? page.scrollTop <= 1 : page.scrollTop >= bottom - 1)) {
+        projectPageScroll.edgeDelta = 0;
+        return false;
+      }
+      event.preventDefault();
+      projectPageScroll.edgeDelta += overscroll;
+      return true;
+    }
+    event.preventDefault();
+    if (projectScroll.target) releaseProjectScroll();
+    projectPageScroll.target = target;
+    projectPageScroll.edgeDelta = overscroll;
+    if (!projectPageScroll.frame) {
+      projectPageScroll.position = page.scrollTop;
+      projectPageScroll.velocity = 0;
+      projectPageScroll.time = 0;
+      projectPageScroll.frame = requestAnimationFrame(springProjectPageScroll);
+    }
+    return true;
+  }
+
+  function springProjectPageScroll(time) {
+    const page = document.scrollingElement;
+    if (!page || !state.motion || state.screen !== 'projects') { stopProjectPageScroll(); return; }
+    const dt = projectPageScroll.time ? Math.min((time - projectPageScroll.time) / 1000, .05) : 1 / 60;
+    projectPageScroll.time = time;
+    const bottom = Math.max(0, page.scrollHeight - page.clientHeight);
+    projectPageScroll.target = Math.max(0, Math.min(bottom, projectPageScroll.target));
+    // Blend wheel ticks into one spring, retaining velocity instead of restarting an easing.
+    const distance = projectPageScroll.position - projectPageScroll.target;
+    const carry = projectPageScroll.velocity + 16 * distance;
+    const decay = Math.exp(-16 * dt);
+    projectPageScroll.position = Math.max(0, Math.min(bottom, projectPageScroll.target + (distance + carry * dt) * decay));
+    projectPageScroll.velocity = (projectPageScroll.velocity - 16 * carry * dt) * decay;
+    const settled = Math.abs(projectPageScroll.target - projectPageScroll.position) < .25 && Math.abs(projectPageScroll.velocity) < 2;
+    if (settled) projectPageScroll.position = projectPageScroll.target;
+    window.scrollTo({ top: projectPageScroll.position, behavior: 'instant' });
+    // A trackpad gesture may finish before its eased movement reaches the edge.
+    if (projectPageScroll.edgeDelta && Math.abs(projectPageScroll.target - projectPageScroll.position) < 1) {
+      pullProjectScroll(projectPageScroll.edgeDelta);
+      projectPageScroll.edgeDelta = 0;
+    }
+    if (settled) stopProjectPageScroll();
+    else projectPageScroll.frame = requestAnimationFrame(springProjectPageScroll);
   }
 
   function queueProjectScroll() {
@@ -127,7 +198,7 @@
   }
 
   function stretchProjectScroll(event, delta) {
-    if (!state.motion || pendingScreen || state.screen !== 'projects' || !delta || !event.cancelable || $$('dialog[open]').length) return;
+    if (!state.motion || pendingScreen || state.screen !== 'projects' || !delta || $$('dialog[open]').length) return;
     if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
     const page = document.scrollingElement;
     if (!page) return;
@@ -138,14 +209,20 @@
       if (projectScroll.target) releaseProjectScroll();
       return;
     }
-    event.preventDefault();
+    if (event.cancelable) event.preventDefault();
+    pullProjectScroll(delta);
+  }
+
+  function pullProjectScroll(delta) {
     // At either bound, retract the cards toward the screen edge instead of moving the page.
     const resistance = .12 * (1 - projectScroll.target / 32);
-    projectScroll.target = Math.min(28, projectScroll.target + Math.min(180, Math.abs(delta)) * resistance);
+    // Small precision-trackpad deltas need enough gain to make the elastic response visible.
+    const pull = Math.min(180, Math.max(12, Math.abs(delta)));
+    projectScroll.target = Math.min(28, projectScroll.target + pull * resistance);
     queueProjectScroll();
     // Treat a burst of wheel ticks as one gesture, then ease back after it ends.
     clearTimeout(projectScroll.releaseTimer);
-    if (projectScroll.touchY === null) projectScroll.releaseTimer = setTimeout(releaseProjectScroll, 160);
+    if (projectScroll.touchY === null) projectScroll.releaseTimer = setTimeout(releaseProjectScroll, 220);
   }
 
   function releaseProjectScroll() {
@@ -367,6 +444,7 @@
   }
 
   function renderProjects() {
+    stopProjectPageScroll();
     const list = visibleProjects();
     if (list.length && !list.some(project => project.id === state.selected)) { state.selected = list[0].id; state.expanded = true; }
     $('#song-list').innerHTML = list.length ? list.map((project, index) => {
@@ -374,7 +452,7 @@
       const expanded = selected && state.expanded;
       return `<article class="song-entry ${selected ? 'selected' : ''} ${expanded ? 'expanded' : ''}" data-project="${project.id}" style="--card-index:${index};--project-accent:${project.accent}">
         <button class="song-card" aria-expanded="${expanded}" aria-controls="details-${project.id}" aria-label="${escape(project.title)}: ${escape(project.subtitle)}">
-          <img class="song-thumbnail" src="${escape(project.image)}" alt="">
+          <span class="song-thumbnail-frame"><img class="song-thumbnail" src="${escape(project.image)}" alt=""></span>
           <span class="song-copy"><span class="song-category">${project.category === 'hardware' ? 'EMBEDDED SYSTEMS' : project.id === 'f1' ? 'DATA VISUALIZATION' : project.id === 'atnathanosu' ? 'GAME DEVELOPMENT' : 'SOFTWARE & SIMULATION'}</span><strong class="song-title">${escape(project.title)}</strong><span class="song-subtitle">${escape(project.subtitle)}</span><span class="song-stack">${escape(project.stack.slice(0, 4).join(' · '))}</span></span>
           <span class="song-status" aria-hidden="true">${selected ? '●' : ''}</span>
         </button>
@@ -392,6 +470,7 @@
   }
 
   function selectProject(id, { toggle = false, focus = false } = {}) {
+    stopProjectPageScroll();
     const same = state.selected === id;
     state.selected = id;
     state.expanded = same && toggle ? !state.expanded : true;
@@ -459,10 +538,11 @@
   $('#launch-project').addEventListener('click', () => openCaseStudy());
   $('#project-search').addEventListener('input', event => { state.query = event.target.value; renderProjects(); });
   $('#project-sort').addEventListener('change', event => { state.sort = event.target.value; renderProjects(); });
-  $('#projects-screen').addEventListener('wheel', event => {
-    if (event.ctrlKey || event.defaultPrevented || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+  document.addEventListener('wheel', event => {
+    if (state.screen !== 'projects' || event.ctrlKey || event.defaultPrevented || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
-    stretchProjectScroll(event, event.deltaY * unit);
+    const delta = event.deltaY * unit;
+    if (!smoothProjectWheel(event, delta)) stretchProjectScroll(event, delta);
   }, { passive: false });
   $('#projects-screen').addEventListener('touchstart', event => {
     resetProjectScroll();
@@ -482,9 +562,10 @@
     queuePointerMotion();
   }, { passive: true });
   document.documentElement.addEventListener('pointerleave', () => { pointerPosition = null; queuePointerMotion(); });
+  document.addEventListener('pointerdown', stopProjectPageScroll, { passive: true });
   window.addEventListener('blur', () => { pointerPosition = null; resetProjectScroll(); queuePointerMotion(); });
   window.addEventListener('scroll', queuePointerMotion, { passive: true });
-  window.addEventListener('resize', queuePointerMotion, { passive: true });
+  window.addEventListener('resize', () => { stopProjectPageScroll(); queuePointerMotion(); }, { passive: true });
   pointerQuery.addEventListener?.('change', () => { pointerPosition = null; queuePointerMotion(); });
   if (typeof ResizeObserver === 'function') new ResizeObserver(queuePointerMotion).observe($('#song-list'));
   document.addEventListener('click', event => {
@@ -513,6 +594,7 @@
   $('#case-study-dialog').addEventListener('close', () => { if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true }); });
 
   document.addEventListener('keydown', event => {
+    stopProjectPageScroll();
     if (event.ctrlKey || event.metaKey || event.altKey || $$('dialog[open]').length) return;
     const typing = event.target.closest('input,textarea,select,[contenteditable="true"]');
     if (event.key === 'Escape') {

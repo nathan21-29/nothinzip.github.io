@@ -43,9 +43,9 @@ body{isolation:isolate}#main-content{min-height:calc(100vh - 5.375rem);padding-b
 .transition-wipe{background:#1b141e;transform:none;opacity:0;transition:opacity .28s ease-in-out}
 .transition-wipe.is-active{animation:none;opacity:1}
 
-/* Case studies lift into view as an overview, with a gently dimming backdrop. */
-.case-study-dialog[open]{animation:overviewOpen .34s cubic-bezier(.2,.75,.2,1) both}
-.case-study-dialog[open]::backdrop{animation:overviewBackdrop .28s ease-out both}
+/* Case studies and image viewers share a lift and a gently dimming backdrop. */
+.case-study-dialog[open],.lightbox[open]{animation:overviewOpen .34s cubic-bezier(.2,.75,.2,1) both}
+.case-study-dialog[open]::backdrop,.lightbox[open]::backdrop{animation:overviewBackdrop .28s ease-out both}
 @keyframes overviewOpen{from{opacity:0;transform:translateY(1.25rem) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes overviewBackdrop{from{opacity:0}to{opacity:1}}
 
@@ -62,4 +62,33 @@ html:has(body[data-screen="projects"]){overscroll-behavior-y:none}
 }
 @media(min-width:100rem){
   .projects-screen,.about-screen{padding-inline:6vw}
+}
+
+/* One shared shear keeps card and thumbnail edges parallel at every card height. */
+.song-card{
+  padding:.625rem 1.125rem .625rem .625rem;
+  gap:1.25rem;
+  align-items:stretch;
+  clip-path:none;
+  transform:skewX(-8deg);
+}
+.song-thumbnail-frame{
+  position:relative;
+  flex:0 0 5.5rem;
+  min-height:4.5rem;
+  overflow:hidden;
+}
+.song-thumbnail{
+  position:absolute;
+  inset:0 auto 0 -1rem;
+  width:calc(100% + 2rem);
+  height:100%;
+  border-radius:0;
+  object-fit:cover;
+  transform:skewX(8deg);
+}
+.song-copy,.song-status{align-self:center;transform:skewX(8deg)}
+@media(max-width:35rem){
+  .song-card{gap:.875rem}
+  .song-thumbnail-frame{flex-basis:4.25rem;min-height:3.75rem}
 }

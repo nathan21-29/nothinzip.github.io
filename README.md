@@ -8,6 +8,8 @@ The portfolio presents four projects, led by **atNathanOsu**, a Java rhythm game
 
 Desktop content fills more of the viewport while keeping an outer margin. Typography, cards, controls, and spacing scale together on larger screens; mobile retains its compact layout. Images keep their original layout proportions.
 
+Project thumbnails follow the cards' parallelogram edges with equal left, top, and bottom insets. Wheel scrolling blends into a continuous damped movement, with card recoil at page bounds for mouse wheels and precision trackpads. The image viewer and case study share the same opening animation.
+
 The home scene layers a uniform plum tint over the supplied photo at `assets/site-background.jpg`. Extra scrolling at either bound of Project Select retracts the cards slightly toward the right edge, then eases them back into place. Repeated wheel ticks blend into one continuous movement, with the cards returning after scrolling stops. The effect moves only the cards. Longer pages still scroll normally, and reduced motion disables the recoil. Selecting a project rolls its details open while the previous selection rolls closed.
 
 ## Open the portfolio
