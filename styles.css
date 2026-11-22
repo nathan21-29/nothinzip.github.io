@@ -43,6 +43,15 @@ body{isolation:isolate}#main-content{min-height:calc(100vh - 5.375rem);padding-b
 .transition-wipe{background:#1b141e;transform:none;opacity:0;transition:opacity .28s ease-in-out}
 .transition-wipe.is-active{animation:none;opacity:1}
 
+.lightbox .dialog-close{
+  position:absolute;
+  float:none;
+  top:1.75rem;
+  right:1.75rem;
+  background:#2a1e2ae6;
+  box-shadow:0 .125rem .5rem #0006;
+}
+
 /* Case studies and image viewers share a lift and a gently dimming backdrop. */
 .case-study-dialog[open],.lightbox[open]{animation:overviewOpen .34s cubic-bezier(.2,.75,.2,1) both}
 .case-study-dialog[open]::backdrop,.lightbox[open]::backdrop{animation:overviewBackdrop .28s ease-out both}
@@ -66,6 +75,7 @@ html:has(body[data-screen="projects"]){overscroll-behavior-y:none}
 
 /* One shared shear keeps card and thumbnail edges parallel at every card height. */
 .song-card{
+  background:linear-gradient(100deg,rgba(167,72,126,.9),rgba(112,63,112,.9));
   padding:.625rem 1.125rem .625rem .625rem;
   gap:1.25rem;
   align-items:stretch;

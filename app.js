@@ -17,6 +17,7 @@
   let navigationId = 0;
   let pendingScreen = null;
   let previouslyFocused;
+  const closingDialogs = new WeakSet();
   let pointerFrame = 0;
   let pointerPosition = null;
   const cursorGravity = { y: null, strength: 0, time: 0 };
@@ -522,6 +523,35 @@
     queuePointerMotion();
   }
 
+  async function closeDialog(dialog) {
+    if (!dialog.open || closingDialogs.has(dialog)) return;
+    closingDialogs.add(dialog);
+    try {
+      // Ease out toward the opening pose, starting from the currently visible position.
+      const animations = dialog.getAnimations({ subtree: true }).filter(animation =>
+        animation.animationName === 'overviewOpen' || animation.animationName === 'overviewBackdrop'
+      );
+      for (const animation of animations) {
+        const effect = animation.effect;
+        const style = getComputedStyle(dialog, effect.pseudoElement);
+        const from = { opacity: style.opacity };
+        const to = { opacity: 0 };
+        if (animation.animationName === 'overviewOpen') {
+          from.transform = style.transform;
+          to.transform = effect.getKeyframes()[0].transform;
+        }
+        effect.setKeyframes([from, to]);
+        effect.updateTiming({ easing: 'ease-out' });
+        animation.currentTime = 0;
+        animation.play();
+      }
+      await Promise.allSettled(animations.map(animation => animation.finished));
+      dialog.close();
+    } finally {
+      closingDialogs.delete(dialog);
+    }
+  }
+
   function randomProject() {
     const list = visibleProjects();
     const candidates = list.filter(project => project.id !== state.selected);
@@ -580,15 +610,19 @@
     if (target.classList.contains('song-card')) selectProject(target.closest('[data-project]').dataset.project, { toggle: true, focus: true });
     if (target.hasAttribute('data-case-study')) openCaseStudy(target.dataset.caseStudy || state.selected);
     if (target.hasAttribute('data-image')) openImage(target);
-    if (target.dataset.close) $(`#${target.dataset.close}`).close();
+    if (target.dataset.close) closeDialog($(`#${target.dataset.close}`));
     if (target.id === 'clear-filters') resetFilters();
   });
   for (const dialog of $$('dialog')) {
     dialog.addEventListener('close', queuePointerMotion);
+    dialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      closeDialog(dialog);
+    });
     dialog.addEventListener('click', event => {
       if (event.target !== dialog) return;
       const rect = dialog.getBoundingClientRect();
-      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog(dialog);
     });
   }
   $('#case-study-dialog').addEventListener('close', () => { if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true }); });
