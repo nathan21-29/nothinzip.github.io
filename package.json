@@ -1,0 +1,10 @@
+{
+  "name": "nathan-chan-portfolio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An osu!stable-inspired personal portfolio for Nathan Chan.",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node checks.mjs && node --check server.mjs"
+  }
+}

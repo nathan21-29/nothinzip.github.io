@@ -1,2 +1,53 @@
-# nathan21-29.github.io
-Hello!
+# Nathan Chan — portfolio
+
+A local, offline portfolio inspired by osu!stable’s interface. It is a static site and needs no dependency installation.
+
+This entire `nathan-portfolio` folder is the repository root. Everything required to run the site is included inside it.
+
+The portfolio presents four projects, led by **atNathanOsu**, a Java rhythm game with standard and four-key modes.
+
+## Open the portfolio
+
+Open `index.html` directly in a modern browser. For a local server instead, install Node.js and run:
+
+```sh
+npm start
+```
+
+Then visit <http://127.0.0.1:4173>.
+
+## GitHub Pages
+
+Push the contents of this folder to your website repository. `index.html`, `styles.css`, `app.js`, `projects.js`, and `assets/` are already in the root, with relative URLs that work on both a `username.github.io` site and a repository subpath.
+
+In the repository's **Settings > Pages**, choose **Deploy from a branch**, then **main** and **/ (root)**. Once that setting is in place, pushing to `main` updates the site. No build command, npm installation, or running server is needed on GitHub Pages. The included `.nojekyll` file keeps it a plain static site.
+
+Edit project titles, descriptions, credits, and image paths in `projects.js`. Personal text and links are in `index.html`, and visual styles are in `styles.css`.
+
+## Controls
+
+- Press **Enter** on the opening circle to open the main menu.
+- Press **P** for projects, **A** for about, and **Esc** to go back.
+- Use the arrow keys to move through selections, **/** to search, and **F2** for a random project.
+- Press **Enter** on a selected project to open its case study. Mouse and touch controls are also available.
+- Audio ambience is optional and generated with Web Audio after opting in. No game audio or imported copyrighted game assets are included.
+- Reduced-motion preferences are honored; the motion toggle can also be used to reduce animation.
+
+## Project checks
+
+With Node.js installed, run the source and content checks:
+
+```sh
+npm run check
+```
+
+These check JavaScript syntax, project records, screenshot files, local asset references, control wiring, accessibility markup, and animation declarations. They do not replace a visual browser review. The automated browser in the authoring environment could not access localhost or local file URLs, so the final rendered layout and live interactions still need a local browser review.
+
+## Design reference
+
+The interaction draws on the classic osu!stable client interface and its circle button:
+
+- <https://osu.ppy.sh/wiki/en/Client/Interface>
+- <https://osu.ppy.sh/wiki/en/Client/Interface/Cookie>
+
+Project images are genuine project photos/screenshots. Future additions could include a two-driver F1 delta screenshot, short demo recordings, a portrait, and the crane’s Arduino sketch or wiring diagram.
