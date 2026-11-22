@@ -28,7 +28,7 @@
   let backdropRequest = 0;
   const imageCache = new Map();
   let projectPreload;
-  const projectScroll = { offset: 0, velocity: 0, frame: 0, time: 0, touchY: null };
+  const projectScroll = { offset: 0, target: 0, velocity: 0, frame: 0, time: 0, touchY: null, releaseTimer: 0 };
   const background = document.createElement('div');
   background.className = 'site-background';
   $('.world').prepend(background);
@@ -68,23 +68,35 @@
 
   function resetProjectScroll() {
     cancelAnimationFrame(projectScroll.frame);
-    Object.assign(projectScroll, { offset: 0, velocity: 0, frame: 0, time: 0, touchY: null });
-    $('.project-scroll-content').style.setProperty('--project-scroll-offset', '0px');
+    clearTimeout(projectScroll.releaseTimer);
+    Object.assign(projectScroll, { offset: 0, target: 0, velocity: 0, frame: 0, time: 0, touchY: null, releaseTimer: 0 });
+    $('#song-list').style.setProperty('--card-recoil', '0px');
+  }
+
+  function queueProjectScroll() {
+    if (projectScroll.frame) return;
+    projectScroll.time = 0;
+    projectScroll.frame = requestAnimationFrame(springProjectScroll);
   }
 
   function springProjectScroll(time) {
-    const dt = projectScroll.time ? Math.min((time - projectScroll.time) / 1000, .032) : 1 / 60;
+    const dt = projectScroll.time ? Math.min((time - projectScroll.time) / 1000, .05) : 1 / 60;
     projectScroll.time = time;
-    projectScroll.velocity += (-180 * projectScroll.offset - 20 * projectScroll.velocity) * dt;
-    projectScroll.offset += projectScroll.velocity * dt;
-    if (Math.abs(projectScroll.offset) < .1 && Math.abs(projectScroll.velocity) < .1) {
-      resetProjectScroll();
-      queuePointerMotion();
-      return;
+    // A critically damped spring preserves velocity across wheel ticks and frame rates.
+    const distance = projectScroll.offset - projectScroll.target;
+    const carry = projectScroll.velocity + 12 * distance;
+    const decay = Math.exp(-12 * dt);
+    projectScroll.offset = projectScroll.target + (distance + carry * dt) * decay;
+    projectScroll.velocity = (projectScroll.velocity - 12 * carry * dt) * decay;
+    const settled = Math.abs(projectScroll.target - projectScroll.offset) < .05 && Math.abs(projectScroll.velocity) < .05;
+    if (settled) {
+      projectScroll.offset = projectScroll.target;
+      projectScroll.velocity = 0;
+      projectScroll.frame = 0;
     }
-    $('.project-scroll-content').style.setProperty('--project-scroll-offset', `${projectScroll.offset.toFixed(2)}px`);
+    $('#song-list').style.setProperty('--card-recoil', `${projectScroll.offset.toFixed(2)}px`);
     queuePointerMotion();
-    projectScroll.frame = requestAnimationFrame(springProjectScroll);
+    if (!settled) projectScroll.frame = requestAnimationFrame(springProjectScroll);
   }
 
   function stretchProjectScroll(event, delta) {
@@ -96,20 +108,25 @@
     const atEdge = delta < 0 ? page.scrollTop <= 1 : page.scrollTop >= bottom - 1;
     // Let the browser scroll long pages normally until their top or bottom edge.
     if (!atEdge) {
-      if (projectScroll.offset) resetProjectScroll();
+      if (projectScroll.target) releaseProjectScroll();
       return;
     }
     event.preventDefault();
-    const resistance = .35 * (1 - Math.abs(projectScroll.offset) / 110);
-    projectScroll.offset = Math.max(-88, Math.min(88, projectScroll.offset - Math.max(-180, Math.min(180, delta)) * resistance));
-    projectScroll.velocity = 0;
-    $('.project-scroll-content').style.setProperty('--project-scroll-offset', `${projectScroll.offset.toFixed(2)}px`);
-    if (!projectScroll.frame && projectScroll.touchY === null) projectScroll.frame = requestAnimationFrame(springProjectScroll);
+    // At either bound, retract the cards toward the screen edge instead of moving the page.
+    const resistance = .12 * (1 - projectScroll.target / 32);
+    projectScroll.target = Math.min(28, projectScroll.target + Math.min(180, Math.abs(delta)) * resistance);
+    queueProjectScroll();
+    // Treat a burst of wheel ticks as one gesture, then ease back after it ends.
+    clearTimeout(projectScroll.releaseTimer);
+    if (projectScroll.touchY === null) projectScroll.releaseTimer = setTimeout(releaseProjectScroll, 160);
   }
 
   function releaseProjectScroll() {
+    clearTimeout(projectScroll.releaseTimer);
+    projectScroll.releaseTimer = 0;
     projectScroll.touchY = null;
-    if (projectScroll.offset && !projectScroll.frame) projectScroll.frame = requestAnimationFrame(springProjectScroll);
+    projectScroll.target = 0;
+    if (projectScroll.offset || projectScroll.velocity) queueProjectScroll();
   }
 
   function setMotion(enabled, persist = true) {

@@ -41,8 +41,8 @@ body{isolation:isolate}#main-content{min-height:calc(100vh - 86px);padding-botto
 @keyframes overviewOpen{from{opacity:0;transform:translateY(20px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes overviewBackdrop{from{opacity:0}to{opacity:1}}
 
-/* Clip the moving content without creating an extra scroll container. */
+/* At the list bounds, only the cards retract toward the right edge. */
 body{overflow-x:clip}
-.projects-screen{overflow:clip}
-.project-scroll-content{translate:0 var(--project-scroll-offset,0px)}
-.reduced-motion .project-scroll-content{translate:none}
+html:has(body[data-screen="projects"]){overscroll-behavior-y:none}
+.song-entry{translate:var(--card-recoil,0px) 0}
+.reduced-motion .song-entry{translate:none}
