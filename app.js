@@ -28,6 +28,7 @@
   let backdropRequest = 0;
   const imageCache = new Map();
   let projectPreload;
+  const projectScroll = { offset: 0, velocity: 0, frame: 0, time: 0, touchY: null };
   const background = document.createElement('div');
   background.className = 'site-background';
   $('.world').prepend(background);
@@ -65,6 +66,52 @@
     }
   }
 
+  function resetProjectScroll() {
+    cancelAnimationFrame(projectScroll.frame);
+    Object.assign(projectScroll, { offset: 0, velocity: 0, frame: 0, time: 0, touchY: null });
+    $('.project-scroll-content').style.setProperty('--project-scroll-offset', '0px');
+  }
+
+  function springProjectScroll(time) {
+    const dt = projectScroll.time ? Math.min((time - projectScroll.time) / 1000, .032) : 1 / 60;
+    projectScroll.time = time;
+    projectScroll.velocity += (-180 * projectScroll.offset - 20 * projectScroll.velocity) * dt;
+    projectScroll.offset += projectScroll.velocity * dt;
+    if (Math.abs(projectScroll.offset) < .1 && Math.abs(projectScroll.velocity) < .1) {
+      resetProjectScroll();
+      queuePointerMotion();
+      return;
+    }
+    $('.project-scroll-content').style.setProperty('--project-scroll-offset', `${projectScroll.offset.toFixed(2)}px`);
+    queuePointerMotion();
+    projectScroll.frame = requestAnimationFrame(springProjectScroll);
+  }
+
+  function stretchProjectScroll(event, delta) {
+    if (!state.motion || pendingScreen || state.screen !== 'projects' || !delta || !event.cancelable || $$('dialog[open]').length) return;
+    if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
+    const page = document.scrollingElement;
+    if (!page) return;
+    const bottom = Math.max(0, page.scrollHeight - page.clientHeight);
+    const atEdge = delta < 0 ? page.scrollTop <= 1 : page.scrollTop >= bottom - 1;
+    // Let the browser scroll long pages normally until their top or bottom edge.
+    if (!atEdge) {
+      if (projectScroll.offset) resetProjectScroll();
+      return;
+    }
+    event.preventDefault();
+    const resistance = .35 * (1 - Math.abs(projectScroll.offset) / 110);
+    projectScroll.offset = Math.max(-88, Math.min(88, projectScroll.offset - Math.max(-180, Math.min(180, delta)) * resistance));
+    projectScroll.velocity = 0;
+    $('.project-scroll-content').style.setProperty('--project-scroll-offset', `${projectScroll.offset.toFixed(2)}px`);
+    if (!projectScroll.frame && projectScroll.touchY === null) projectScroll.frame = requestAnimationFrame(springProjectScroll);
+  }
+
+  function releaseProjectScroll() {
+    projectScroll.touchY = null;
+    if (projectScroll.offset && !projectScroll.frame) projectScroll.frame = requestAnimationFrame(springProjectScroll);
+  }
+
   function setMotion(enabled, persist = true) {
     state.motion = enabled;
     document.body.classList.toggle('reduced-motion', !enabled);
@@ -75,6 +122,7 @@
     if (persist) savePreference('nathan-motion', enabled ? 'on' : 'off');
     queuePointerMotion();
     if (!enabled) {
+      resetProjectScroll();
       if (pendingScreen) {
         ++navigationId;
         const screen = pendingScreen;
@@ -129,6 +177,7 @@
   }
 
   function applyScreen(screen, focus = true) {
+    resetProjectScroll();
     state.screen = screen;
     pointerPosition = null;
     queuePointerMotion();
@@ -331,6 +380,7 @@
   function openCaseStudy(id = state.selected) {
     const project = projects.find(item => item.id === id);
     if (!project) return;
+    resetProjectScroll();
     const dialog = $('#case-study-dialog');
     const contactLink = `<a class="solid-link" href="mailto:n76chan@uwaterloo.ca?subject=${encodeURIComponent(project.title + ' project')}">Ask about this project</a>`;
     $('#case-study-content').innerHTML = `<header class="case-study-header"><span class="eyebrow">${project.category === 'hardware' ? 'EMBEDDED SYSTEMS' : 'PROJECT CASE STUDY'}</span><h2 id="case-study-title">${escape(project.title)}</h2><p class="case-study-subtitle">${escape(project.stack.join(' / '))}</p></header><div class="case-study-body"><div class="case-study-copy"><section class="case-study-section"><h3>The project</h3><p>${escape(project.summary)}</p></section><section class="case-study-section"><h3>My contribution</h3><p>${escape(project.contribution)}</p></section><section class="case-study-section"><h3>Under the hood</h3><p>${escape(project.engineering)}</p></section><section class="case-study-section"><h3>What it does</h3><ul>${project.highlights.map(item => `<li>${escape(item)}</li>`).join('')}</ul></section>${project.collaboration ? `<p class="collaboration-note">${escape(project.collaboration)}</p>` : ''}<div class="case-study-actions">${project.repo ? `<a class="solid-link" href="${escape(project.repo)}" target="_blank" rel="noreferrer">View source code</a>` : contactLink}</div></div><div class="case-study-gallery">${project.images.map(image => `<figure><button class="image-button" data-image="${escape(image.src)}" data-image-alt="${escape(image.alt)}" data-image-caption="${escape(image.caption)}" aria-label="Enlarge ${escape(image.caption)}"><img src="${escape(image.src)}" alt="${escape(image.alt)}"></button><figcaption>${escape(image.caption)}</figcaption></figure>`).join('')}</div></div>`;
@@ -341,6 +391,7 @@
   }
 
   function openImage(button) {
+    resetProjectScroll();
     $('#lightbox-image').src = button.dataset.image;
     $('#lightbox-image').alt = button.dataset.imageAlt || '';
     $('#lightbox-caption').textContent = button.dataset.imageCaption || '';
@@ -364,13 +415,30 @@
   $('#launch-project').addEventListener('click', () => openCaseStudy());
   $('#project-search').addEventListener('input', event => { state.query = event.target.value; renderProjects(); });
   $('#project-sort').addEventListener('change', event => { state.sort = event.target.value; renderProjects(); });
+  $('#projects-screen').addEventListener('wheel', event => {
+    if (event.ctrlKey || event.defaultPrevented || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+    stretchProjectScroll(event, event.deltaY * unit);
+  }, { passive: false });
+  $('#projects-screen').addEventListener('touchstart', event => {
+    resetProjectScroll();
+    projectScroll.touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
+  }, { passive: true });
+  $('#projects-screen').addEventListener('touchmove', event => {
+    if (event.touches.length !== 1 || projectScroll.touchY === null) { releaseProjectScroll(); return; }
+    const y = event.touches[0].clientY;
+    const delta = projectScroll.touchY - y;
+    projectScroll.touchY = y;
+    stretchProjectScroll(event, delta);
+  }, { passive: false });
+  for (const type of ['touchend', 'touchcancel']) $('#projects-screen').addEventListener(type, releaseProjectScroll, { passive: true });
   document.addEventListener('pointermove', event => {
     if (event.pointerType === 'touch' || !state.motion || !pointerQuery.matches) return;
     pointerPosition = { x: event.clientX, y: event.clientY };
     queuePointerMotion();
   }, { passive: true });
   document.documentElement.addEventListener('pointerleave', () => { pointerPosition = null; queuePointerMotion(); });
-  window.addEventListener('blur', () => { pointerPosition = null; queuePointerMotion(); });
+  window.addEventListener('blur', () => { pointerPosition = null; resetProjectScroll(); queuePointerMotion(); });
   window.addEventListener('scroll', queuePointerMotion, { passive: true });
   window.addEventListener('resize', queuePointerMotion, { passive: true });
   pointerQuery.addEventListener?.('change', () => { pointerPosition = null; queuePointerMotion(); });
