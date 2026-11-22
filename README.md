@@ -6,7 +6,7 @@ This entire `nathan-portfolio` folder is the repository root. Everything require
 
 The portfolio presents four projects, led by **atNathanOsu**, a Java rhythm game with standard and four-key modes.
 
-The home scene uses the supplied photo at `assets/site-background.jpg` as its background, with project images crossfading as the selected project changes.
+The home scene layers a uniform plum tint over the supplied photo at `assets/site-background.jpg`. Native page-edge bounce remains enabled. Selecting a project rolls its details open while the previous selection rolls closed.
 
 ## Open the portfolio
 

@@ -259,7 +259,19 @@
     const same = state.selected === id;
     state.selected = id;
     state.expanded = same && toggle ? !state.expanded : true;
-    renderProjects();
+    for (const entry of $$('.song-entry')) {
+      const selected = entry.dataset.project === id;
+      const expanded = selected && state.expanded;
+      entry.classList.toggle('selected', selected);
+      entry.classList.toggle('expanded', expanded);
+      entry.querySelector('.song-card').setAttribute('aria-expanded', String(expanded));
+      entry.querySelector('.song-details').inert = !expanded;
+      entry.querySelector('.song-status').textContent = selected ? '●' : '';
+    }
+    updatePreview(selectedProject());
+    $('#launch-project').setAttribute('aria-label', `Open ${selectedProject().title} case study`);
+    updateBackdrop();
+    queuePointerMotion();
     if (focus) {
       const card = $(`[data-project="${id}"] .song-card`);
       card?.focus({ preventScroll: true });
