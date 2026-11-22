@@ -6,6 +6,8 @@ This entire `nathan-portfolio` folder is the repository root. Everything require
 
 The portfolio presents four projects, led by **atNathanOsu**, a Java rhythm game with standard and four-key modes.
 
+The home scene uses the supplied photo at `assets/site-background.jpg` as its background, with project images crossfading as the selected project changes.
+
 ## Open the portfolio
 
 Open `index.html` directly in a modern browser. For a local server instead, install Node.js and run:
@@ -30,8 +32,9 @@ Edit project titles, descriptions, credits, and image paths in `projects.js`. Pe
 - Press **P** for projects, **A** for about, and **Esc** to go back.
 - Use the arrow keys to move through selections, **/** to search, and **F2** for a random project.
 - Press **Enter** on a selected project to open its case study. Mouse and touch controls are also available.
-- Audio ambience is optional and generated with Web Audio after opting in. No game audio or imported copyrighted game assets are included.
-- Reduced-motion preferences are honored; the motion toggle can also be used to reduce animation.
+- Move the cursor over project cards and the home scene to see their previews and parallax respond.
+- The home circle uses a one-second bouncy pulse, and project previews fade as the selection changes.
+- Motion is on by default. Use the motion toggle to reduce animation; your choice is remembered.
 
 ## Project checks
 
@@ -41,7 +44,7 @@ With Node.js installed, run the source and content checks:
 npm run check
 ```
 
-These check JavaScript syntax, project records, screenshot files, local asset references, control wiring, accessibility markup, and animation declarations. They do not replace a visual browser review. The automated browser in the authoring environment could not access localhost or local file URLs, so the final rendered layout and live interactions still need a local browser review.
+These check JavaScript syntax, project records, screenshot files, local asset references, control wiring, accessibility markup, and animation declarations. They do not replace a visual browser review.
 
 ## Design reference
 

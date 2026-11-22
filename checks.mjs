@@ -62,9 +62,9 @@ check('Main menu has the two requested destinations', () => {
   assert.equal((menu.match(/class="menu-entry /g) || []).length, 2);
   assert.match(menu, /data-go="projects"/); assert.match(menu, /data-go="about"/);
 });
-check('The menu pulse grows then snaps at its 500ms cycle boundary', () => {
-  assert.match(css, /animation:heartbeat\s+\.5s\s+linear\s+infinite/);
-  assert.match(css, /@keyframes heartbeat\{from\{transform:scale\(1\)\}to\{transform:scale\(1\.035\)\}\}/);
+check('The menu pulse uses the one-second bouncy cycle', () => {
+  assert.match(css, /animation:heartbeat\s+1s\s+linear\s+infinite/);
+  assert.match(css, /@keyframes heartbeat\{0%\{transform:scale\(1\)\}72%\{transform:scale\(1\.035\)\}82%\{transform:scale\(\.992\)\}91%\{transform:scale\(1\.008\)\}100%\{transform:scale\(1\)\}\}/);
 });
 check('Reduced-motion handling and preference control are present', () => { assert.match(css, /prefers-reduced-motion/); assert.match(app, /nathan-motion/); assert.match(html, /id="motion-toggle"/); });
 check('Case study and image viewer are real labelled dialogs', () => { assert.match(html, /<dialog[^>]+id="case-study-dialog"[^>]+aria-labelledby=/); assert.match(html, /<dialog[^>]+id="lightbox"[^>]+aria-label=/); });
@@ -74,6 +74,7 @@ check('Search, filter, random selection and history controls are connected', () 
   assert.match(app, /window\.addEventListener\('popstate'/);
   assert.match(app, /event\.key === 'ArrowDown'/);
 });
-check('Audio is opt-in and begins from a user click', () => { assert.match(app, /audio: false/); assert.match(app, /audio-toggle'\)\.addEventListener\('click'/); assert.match(app, /AudioContext/); });
+check('Audio controls and runtime are absent', () => { assert.doesNotMatch(html, /audio-toggle|jukebox|track-state|track-name/); assert.doesNotMatch(app, /AudioContext|audio-toggle|track-state|track-name/); });
+check('About page has no portfolio PDF download', () => { assert.doesNotMatch(html, /portfolio-download|Nathan_Chan_Project_Portfolio\.pdf|\bdownload\b/i); });
 
 console.log(`\n${count} checks passed. These are source/content checks, not a browser rendering test.`);

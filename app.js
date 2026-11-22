@@ -7,17 +7,31 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   const readPreference = name => { try { return localStorage.getItem(name); } catch { return null; } };
   const savePreference = (name, value) => { try { localStorage.setItem(name, value); } catch { /* Private/file browsing still works. */ } };
-  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const pointerQuery = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 801px)');
   const preference = readPreference('nathan-motion');
   const state = {
     screen: 'home', menuOpen: false, selected: projects[0]?.id,
     filter: 'all', query: '', sort: 'featured', expanded: true,
-    motion: preference === null ? !motionQuery.matches : preference === 'on',
-    audio: false
+    motion: preference !== 'off'
   };
   let navigationId = 0;
-  let toastTimer;
+  let pendingScreen = null;
   let previouslyFocused;
+  let pointerFrame = 0;
+  let pointerPosition = null;
+  let previewRequest = 0;
+  let previewAnimation;
+  let previewProjectId;
+  let previewTargetId;
+  let backdropProjectId;
+  let backdropLayer = 0;
+  let backdropRequest = 0;
+  const background = document.createElement('div');
+  background.className = 'site-background';
+  $('.world').prepend(background);
+  const backdropLayers = [$('#world-image'), $('#world-image').cloneNode(false)];
+  backdropLayers[1].removeAttribute('id');
+  backdropLayers[0].after(backdropLayers[1]);
 
   function selectedProject() { return projects.find(project => project.id === state.selected) || projects[0]; }
   function visibleProjects() {
@@ -29,11 +43,25 @@
     return state.sort === 'title' ? list.sort((a, b) => a.title.localeCompare(b.title)) : list;
   }
 
-  function notify(message) {
-    clearTimeout(toastTimer);
-    $('#toast').textContent = message;
-    $('#toast').classList.add('visible');
-    toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 2400);
+  // One frame per pointer event; CSS eases the layers between their targets.
+  function queuePointerMotion() {
+    if (!pointerFrame) pointerFrame = requestAnimationFrame(updatePointerMotion);
+  }
+
+  function updatePointerMotion() {
+    pointerFrame = 0;
+    const active = state.motion && pointerQuery.matches && pointerPosition && !$$('dialog[open]').length;
+    const home = active && state.screen === 'home';
+    document.body.style.setProperty('--pointer-x', `${home ? (pointerPosition.x / window.innerWidth * 2 - 1).toFixed(3) : 0}px`);
+    document.body.style.setProperty('--pointer-y', `${home ? (pointerPosition.y / window.innerHeight * 2 - 1).toFixed(3) : 0}px`);
+    const library = $('.project-library').getBoundingClientRect();
+    const inLibrary = active && state.screen === 'projects' && pointerPosition.x >= library.left - 48 && pointerPosition.x <= library.right && pointerPosition.y >= library.top && pointerPosition.y <= library.bottom;
+    for (const entry of $$('.song-entry')) {
+      const card = entry.querySelector('.song-card').getBoundingClientRect();
+      const distance = inLibrary ? Math.abs(pointerPosition.y - (card.top + card.height / 2)) : Infinity;
+      const proximity = Math.max(0, 1 - distance / 240);
+      entry.style.setProperty('--cursor-offset', `${(-30 * proximity * proximity).toFixed(2)}px`);
+    }
   }
 
   function setMotion(enabled, persist = true) {
@@ -44,6 +72,18 @@
     $('#motion-toggle').setAttribute('aria-label', enabled ? 'Reduce motion' : 'Enable motion');
     $('#motion-toggle span').textContent = enabled ? 'Motion on' : 'Motion reduced';
     if (persist) savePreference('nathan-motion', enabled ? 'on' : 'off');
+    queuePointerMotion();
+    if (!enabled) {
+      if (pendingScreen) {
+        ++navigationId;
+        const screen = pendingScreen;
+        pendingScreen = null;
+        $('#transition-wipe').classList.remove('is-active');
+        applyScreen(screen);
+      }
+      if (state.screen === 'projects') updatePreview(selectedProject(), true);
+      updateBackdrop(true);
+    }
   }
 
   function toggleMenu(force) {
@@ -56,17 +96,42 @@
     $('#home-tip').innerHTML = state.menuOpen
       ? '<span class="tip-dot"></span>A project, or the person behind it. Your call.<span class="tip-key"><kbd>Esc</kbd> to close</span>'
       : '<span class="tip-dot"></span>Click the circle. There\'s more on the other side.<span class="tip-key"><kbd>Enter</kbd> works, too</span>';
-    if (state.audio) ambience.click(state.menuOpen ? 660 : 440);
   }
 
-  function updateBackdrop() {
+  function updateBackdrop(immediate = false) {
     const project = selectedProject();
-    $('#world-image').style.backgroundImage = state.screen === 'projects' && project ? `url("${project.image}")` : 'none';
+    const id = state.screen === 'projects' && project ? project.id : null;
     document.body.style.setProperty('--selected-accent', project?.accent || '#ed70a8');
+    if (id === backdropProjectId && !immediate) return;
+    backdropProjectId = id;
+    const request = ++backdropRequest;
+    if (!id) {
+      backdropLayers.forEach(layer => layer.classList.remove('is-visible'));
+      return;
+    }
+    const show = () => {
+      if (request !== backdropRequest) return;
+      const next = 1 - backdropLayer;
+      backdropLayers[next].style.backgroundImage = `url("${project.image}")`;
+      backdropLayers[next].classList.add('is-visible');
+      backdropLayers[backdropLayer].classList.remove('is-visible');
+      backdropLayer = next;
+    };
+    if (immediate || !state.motion) show();
+    else loadImage(project.image).then(show);
   }
 
   function applyScreen(screen, focus = true) {
     state.screen = screen;
+    pointerPosition = null;
+    queuePointerMotion();
+    if (screen !== 'projects') {
+      ++previewRequest;
+      previewAnimation?.cancel();
+      previewTargetId = null;
+      $('#project-preview').removeAttribute('aria-busy');
+      $('#project-preview').inert = false;
+    }
     document.body.dataset.screen = screen;
     for (const name of ['home', 'projects', 'about']) $(`#${name}-screen`).hidden = name !== screen;
     $('#back-button').hidden = screen === 'home';
@@ -96,17 +161,56 @@
     if (push && location.hash !== `#${screen}`) {
       try { history.pushState({ screen }, '', `#${screen}`); } catch { /* Works directly from a local file too. */ }
     }
-    if (screen === state.screen) { $('#transition-wipe').classList.remove('is-active'); return; }
+    if (screen === state.screen) { pendingScreen = null; $('#transition-wipe').classList.remove('is-active'); return; }
     if (screen === 'home') state.menuOpen = true;
-    if (state.audio) ambience.click(780);
     const wipe = $('#transition-wipe');
     if (!state.motion) { applyScreen(screen); return; }
+    pendingScreen = screen;
     wipe.classList.add('is-active');
     setTimeout(() => {
       if (id !== navigationId) return;
+      pendingScreen = null;
       applyScreen(screen);
       setTimeout(() => { if (id === navigationId) wipe.classList.remove('is-active'); }, 80);
     }, 170);
+  }
+
+  function loadImage(src) {
+    return new Promise(resolve => {
+      const image = new Image();
+      image.onload = image.onerror = resolve;
+      image.src = src;
+      if (image.complete) resolve();
+    });
+  }
+
+  async function updatePreview(project, immediate = false) {
+    if (!project || (project.id === previewTargetId && !immediate)) return;
+    const request = ++previewRequest;
+    previewTargetId = project.id;
+    previewAnimation?.cancel();
+    const preview = $('#project-preview');
+    if (immediate || !state.motion || !previewProjectId || typeof preview.animate !== 'function') {
+      renderPreview(project);
+      previewProjectId = project.id;
+      preview.removeAttribute('aria-busy');
+      preview.inert = false;
+      return;
+    }
+    preview.setAttribute('aria-busy', 'true');
+    preview.inert = true;
+    previewAnimation = preview.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: 'ease-out', fill: 'forwards' });
+    const imagesReady = Promise.all(project.images.map(image => loadImage(image.src)));
+    await Promise.all([previewAnimation.finished.catch(() => {}), imagesReady]);
+    if (request !== previewRequest) return;
+    renderPreview(project);
+    previewProjectId = project.id;
+    preview.removeAttribute('aria-busy');
+    preview.inert = false;
+    previewAnimation.cancel();
+    previewAnimation = preview.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 210, easing: 'ease-out', fill: 'forwards' });
+    await previewAnimation.finished.catch(() => {});
+    if (request === previewRequest) { previewAnimation.cancel(); previewAnimation = null; }
   }
 
   function renderPreview(project) {
@@ -125,7 +229,6 @@
       <p class="image-caption">${project.images.length > 1 ? 'A closer look at the project. Click any image to explore.' : 'The actual prototype. Click the photo for the full view.'}</p>
       <dl class="project-facts">${project.facts.map(fact => `<div><dt>${escape(fact.label)}</dt><dd>${escape(fact.value)}</dd></div>`).join('')}</dl>
       ${project.repo ? `<a class="preview-link" href="${escape(project.repo)}" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 8-4 4 4 4m8-8 4 4-4 4m-5 5 2-14"/></svg>Explore the source on GitHub</a>` : '<button class="preview-link" data-case-study>Read how it was built</button>'}`;
-    $('#launch-project').setAttribute('aria-label', `Open ${project.title} case study`);
   }
 
   function renderProjects() {
@@ -143,12 +246,14 @@
         <div class="song-details" id="details-${project.id}" ${expanded ? '' : 'inert'}><div class="song-details-inner"><p>${escape(project.description)}</p><ul>${project.highlights.slice(0, 2).map(item => `<li>${escape(item)}</li>`).join('')}</ul><div class="song-actions"><button class="case-study-button" data-case-study="${project.id}">Read case study</button>${project.repo ? `<a class="source-link" href="${escape(project.repo)}" target="_blank" rel="noreferrer">Source code</a>` : `<span class="source-note">${project.category === 'hardware' ? 'Physical prototype' : 'Personal project'}</span>`}</div></div></div>
       </article>`;
     }).join('') : '<div class="empty-state"><span>Nothing in this collection yet.</span><p>Try a different search or show all projects.</p><button id="clear-filters">Clear filters</button></div>';
-    renderPreview(selectedProject());
+    updatePreview(selectedProject());
+    $('#launch-project').setAttribute('aria-label', `Open ${selectedProject().title} case study`);
     $('#launch-project').disabled = !list.length;
     $('#show-case-study').disabled = !list.length;
     $('#random-project').disabled = !list.length;
     $('.library-count').innerHTML = `<strong>${String(list.length).padStart(2, '0')}</strong> ${list.length === 1 ? 'project' : 'projects'} in the collection`;
     updateBackdrop();
+    queuePointerMotion();
   }
 
   function selectProject(id, { toggle = false, focus = false } = {}) {
@@ -161,7 +266,6 @@
       card?.focus({ preventScroll: true });
       card?.scrollIntoView({ block: 'nearest', behavior: state.motion ? 'smooth' : 'auto' });
     }
-    if (state.audio) ambience.click(520 + projects.findIndex(project => project.id === id) * 100);
   }
 
   function resetFilters() {
@@ -178,6 +282,7 @@
     $('#case-study-content').innerHTML = `<header class="case-study-header"><span class="eyebrow">${project.category === 'hardware' ? 'EMBEDDED SYSTEMS' : 'PROJECT CASE STUDY'}</span><h2 id="case-study-title">${escape(project.title)}</h2><p class="case-study-subtitle">${escape(project.stack.join(' / '))}</p></header><div class="case-study-body"><div class="case-study-copy"><section class="case-study-section"><h3>The project</h3><p>${escape(project.summary)}</p></section><section class="case-study-section"><h3>My contribution</h3><p>${escape(project.contribution)}</p></section><section class="case-study-section"><h3>Under the hood</h3><p>${escape(project.engineering)}</p></section><section class="case-study-section"><h3>What it does</h3><ul>${project.highlights.map(item => `<li>${escape(item)}</li>`).join('')}</ul></section>${project.collaboration ? `<p class="collaboration-note">${escape(project.collaboration)}</p>` : ''}<div class="case-study-actions">${project.repo ? `<a class="solid-link" href="${escape(project.repo)}" target="_blank" rel="noreferrer">View source code</a>` : contactLink}</div></div><div class="case-study-gallery">${project.images.map(image => `<figure><button class="image-button" data-image="${escape(image.src)}" data-image-alt="${escape(image.alt)}" data-image-caption="${escape(image.caption)}" aria-label="Enlarge ${escape(image.caption)}"><img src="${escape(image.src)}" alt="${escape(image.alt)}"></button><figcaption>${escape(image.caption)}</figcaption></figure>`).join('')}</div></div>`;
     previouslyFocused = document.activeElement;
     if (!dialog.open) dialog.showModal();
+    queuePointerMotion();
   }
 
   function openImage(button) {
@@ -185,6 +290,7 @@
     $('#lightbox-image').alt = button.dataset.imageAlt || '';
     $('#lightbox-caption').textContent = button.dataset.imageCaption || '';
     $('#lightbox').showModal();
+    queuePointerMotion();
   }
 
   function randomProject() {
@@ -195,81 +301,6 @@
     selectProject(pool[Math.floor(Math.random() * pool.length)].id, { focus: true });
   }
 
-  /* A small original generative ambience, activated only by a user click. */
-  const ambience = {
-    context: null, master: null, timer: null, nextNote: 0, step: 0,
-    async start() {
-      const Audio = window.AudioContext || window.webkitAudioContext;
-      if (!Audio) throw new Error('Audio is unavailable in this browser.');
-      if (!this.context) {
-        this.context = new Audio();
-        this.master = this.context.createGain();
-        this.master.gain.value = 0.11;
-        this.master.connect(this.context.destination);
-      }
-      await this.context.resume();
-      this.nextNote = this.context.currentTime + 0.08;
-      this.step = 0;
-      clearInterval(this.timer);
-      this.timer = setInterval(() => this.schedule(), 60);
-      this.schedule();
-    },
-    schedule() {
-      const context = this.context;
-      if (!context || !state.audio || document.hidden) return;
-      if (this.nextNote < context.currentTime) this.nextNote = context.currentTime + 0.02;
-      const chords = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50]];
-      while (this.nextNote < context.currentTime + 0.18) {
-        const chord = chords[Math.floor(this.step / 16) % chords.length];
-        if (this.step % 4 === 0) chord.forEach(note => this.tone(note, this.nextNote, 1.8, 0.06, 'sine'));
-        const sequence = [0, 2, 1, 2, 1, 0, 2, 1];
-        this.tone(chord[sequence[this.step % 8]] + 24, this.nextNote, 0.34, 0.09, 'sine');
-        if (this.step % 2 === 0) this.tone(31, this.nextNote, 0.1, 0.17, 'sine');
-        this.nextNote += 0.25;
-        this.step += 1;
-      }
-    },
-    tone(note, at, duration, volume, waveform) {
-      const oscillator = this.context.createOscillator();
-      const gain = this.context.createGain();
-      oscillator.type = waveform;
-      oscillator.frequency.value = 440 * 2 ** ((note - 69) / 12);
-      gain.gain.setValueAtTime(0, at);
-      gain.gain.linearRampToValueAtTime(volume, at + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-      oscillator.connect(gain); gain.connect(this.master);
-      oscillator.start(at); oscillator.stop(at + duration + 0.02);
-      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-    },
-    click(frequency) {
-      if (!this.context || this.context.state !== 'running') return;
-      const note = 69 + 12 * Math.log2(frequency / 440);
-      this.tone(note, this.context.currentTime, 0.08, 0.12, 'sine');
-    },
-    async stop() {
-      clearInterval(this.timer);
-      this.timer = null;
-      if (this.context) await this.context.suspend();
-    }
-  };
-
-  $('#audio-toggle').addEventListener('click', async () => {
-    state.audio = !state.audio;
-    try {
-      if (state.audio) await ambience.start(); else await ambience.stop();
-      $('#audio-toggle').setAttribute('aria-pressed', String(state.audio));
-      $('#audio-toggle').setAttribute('aria-label', state.audio ? 'Pause menu ambience' : 'Play original menu ambience');
-      $('#audio-toggle').innerHTML = state.audio ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7ZM15 5h3v14h-3Z"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 11 7-11 7Z"/></svg>';
-      $('#track-state').textContent = state.audio ? 'NOW PLAYING · ORIGINAL AMBIENCE' : 'SOUNDTRACK OPTIONAL';
-      $('#track-name').textContent = state.audio ? 'A little room to explore' : 'A little room to explore';
-      document.body.classList.toggle('audio-playing', state.audio);
-    } catch {
-      state.audio = false;
-      $('#audio-toggle').setAttribute('aria-pressed', 'false');
-      notify('Audio couldn’t start. The rest of the portfolio works without it.');
-    }
-  });
-
   $('#main-cookie').addEventListener('click', () => toggleMenu());
   $('#back-button').addEventListener('click', () => navigate('home'));
   $('#motion-toggle').addEventListener('click', () => setMotion(!state.motion));
@@ -278,6 +309,17 @@
   $('#launch-project').addEventListener('click', () => openCaseStudy());
   $('#project-search').addEventListener('input', event => { state.query = event.target.value; renderProjects(); });
   $('#project-sort').addEventListener('change', event => { state.sort = event.target.value; renderProjects(); });
+  document.addEventListener('pointermove', event => {
+    if (event.pointerType === 'touch' || !state.motion || !pointerQuery.matches) return;
+    pointerPosition = { x: event.clientX, y: event.clientY };
+    queuePointerMotion();
+  }, { passive: true });
+  document.documentElement.addEventListener('pointerleave', () => { pointerPosition = null; queuePointerMotion(); });
+  window.addEventListener('blur', () => { pointerPosition = null; queuePointerMotion(); });
+  window.addEventListener('scroll', queuePointerMotion, { passive: true });
+  window.addEventListener('resize', queuePointerMotion, { passive: true });
+  pointerQuery.addEventListener?.('change', () => { pointerPosition = null; queuePointerMotion(); });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(queuePointerMotion).observe($('#song-list'));
   document.addEventListener('click', event => {
     const target = event.target.closest('button,a');
     if (!target) return;
@@ -294,6 +336,7 @@
     if (target.id === 'clear-filters') resetFilters();
   });
   for (const dialog of $$('dialog')) {
+    dialog.addEventListener('close', queuePointerMotion);
     dialog.addEventListener('click', event => {
       if (event.target !== dialog) return;
       const rect = dialog.getBoundingClientRect();
@@ -337,13 +380,6 @@
   }
   window.addEventListener('popstate', onHistoryChange);
   window.addEventListener('hashchange', onHistoryChange);
-  motionQuery.addEventListener?.('change', event => { if (readPreference('nathan-motion') === null) setMotion(!event.matches, false); });
-  document.addEventListener('visibilitychange', () => {
-    if (!state.audio || !ambience.context) return;
-    if (document.hidden) ambience.context.suspend();
-    else ambience.context.resume().then(() => { ambience.nextNote = ambience.context.currentTime + 0.03; });
-  });
-
   function buildDecorations() {
     let lines = '';
     for (let i = 0; i < 120; i++) {
