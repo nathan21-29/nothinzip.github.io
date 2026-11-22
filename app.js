@@ -26,6 +26,8 @@
   let backdropProjectId;
   let backdropLayer = 0;
   let backdropRequest = 0;
+  const imageCache = new Map();
+  let projectPreload;
   const background = document.createElement('div');
   background.className = 'site-background';
   $('.world').prepend(background);
@@ -90,11 +92,17 @@
     $('#home-stage').classList.toggle('is-open', state.menuOpen);
     $('#main-menu').inert = !state.menuOpen || state.screen !== 'home';
     $('#main-cookie').setAttribute('aria-expanded', String(state.menuOpen));
-    $('#main-cookie').setAttribute('aria-label', state.menuOpen ? 'Close main menu' : 'Open main menu');
+    $('#main-cookie').setAttribute('aria-label', state.menuOpen ? 'Open projects' : 'Open main menu');
     $('#cookie-caption').textContent = state.menuOpen ? 'PICK YOUR NEXT STOP' : 'CLICK TO EXPLORE';
     $('#home-tip').innerHTML = state.menuOpen
-      ? '<span class="tip-dot"></span>A project, or the person behind it. Your call.<span class="tip-key"><kbd>Esc</kbd> to close</span>'
+      ? '<span class="tip-dot"></span>Click the circle again for projects.<span class="tip-key"><kbd>Enter</kbd> to continue · <kbd>Esc</kbd> to close</span>'
       : '<span class="tip-dot"></span>Click the circle. There\'s more on the other side.<span class="tip-key"><kbd>Enter</kbd> works, too</span>';
+    if (state.menuOpen) preloadProjectImages();
+  }
+
+  function activateCookie() {
+    if (state.menuOpen) navigate('projects');
+    else toggleMenu(true);
   }
 
   function updateBackdrop(immediate = false) {
@@ -156,6 +164,8 @@
 
   function navigate(screen, { push = true } = {}) {
     if (!['home', 'projects', 'about'].includes(screen)) return;
+    if (pendingScreen === screen) return;
+    if (screen === 'projects') preloadProjectImages();
     const id = ++navigationId;
     if (push && location.hash !== `#${screen}`) {
       try { history.pushState({ screen }, '', `#${screen}`); } catch { /* Works directly from a local file too. */ }
@@ -170,17 +180,50 @@
       if (id !== navigationId) return;
       pendingScreen = null;
       applyScreen(screen);
-      setTimeout(() => { if (id === navigationId) wipe.classList.remove('is-active'); }, 80);
-    }, 170);
+      requestAnimationFrame(() => { if (id === navigationId) wipe.classList.remove('is-active'); });
+    }, 280);
   }
 
   function loadImage(src) {
-    return new Promise(resolve => {
+    if (imageCache.has(src)) return imageCache.get(src).ready;
+    const cached = {};
+    imageCache.set(src, cached);
+    cached.ready = new Promise(resolve => {
       const image = new Image();
-      image.onload = image.onerror = resolve;
+      cached.image = image;
+      image.decoding = 'async';
+      let settled = false;
+      const finish = async () => {
+        if (settled) return;
+        settled = true;
+        if (!image.naturalWidth) {
+          imageCache.delete(src);
+          resolve(false);
+          return;
+        }
+        // Downloading alone does not make a screenshot ready for its first paint.
+        try { await image.decode?.(); } catch { /* A loaded image can still render. */ }
+        resolve(true);
+      };
+      image.onload = image.onerror = finish;
       image.src = src;
-      if (image.complete) resolve();
+      if (image.complete) finish();
     });
+    return cached.ready;
+  }
+
+  function preloadProjectImages() {
+    if (projectPreload) return projectPreload;
+    const featured = selectedProject();
+    const queue = [...new Set([
+      ...(featured?.images.map(image => image.src) || []),
+      ...projects.map(project => project.image),
+      ...projects.flatMap(project => project.images.map(image => image.src))
+    ])];
+    // Warm the selected overview first; cap concurrency so the menu stays responsive.
+    const warmQueue = async () => { while (queue.length) await loadImage(queue.shift()); };
+    projectPreload = Promise.all(Array.from({ length: 3 }, warmQueue));
+    return projectPreload;
   }
 
   async function updatePreview(project, immediate = false) {
@@ -293,6 +336,7 @@
     $('#case-study-content').innerHTML = `<header class="case-study-header"><span class="eyebrow">${project.category === 'hardware' ? 'EMBEDDED SYSTEMS' : 'PROJECT CASE STUDY'}</span><h2 id="case-study-title">${escape(project.title)}</h2><p class="case-study-subtitle">${escape(project.stack.join(' / '))}</p></header><div class="case-study-body"><div class="case-study-copy"><section class="case-study-section"><h3>The project</h3><p>${escape(project.summary)}</p></section><section class="case-study-section"><h3>My contribution</h3><p>${escape(project.contribution)}</p></section><section class="case-study-section"><h3>Under the hood</h3><p>${escape(project.engineering)}</p></section><section class="case-study-section"><h3>What it does</h3><ul>${project.highlights.map(item => `<li>${escape(item)}</li>`).join('')}</ul></section>${project.collaboration ? `<p class="collaboration-note">${escape(project.collaboration)}</p>` : ''}<div class="case-study-actions">${project.repo ? `<a class="solid-link" href="${escape(project.repo)}" target="_blank" rel="noreferrer">View source code</a>` : contactLink}</div></div><div class="case-study-gallery">${project.images.map(image => `<figure><button class="image-button" data-image="${escape(image.src)}" data-image-alt="${escape(image.alt)}" data-image-caption="${escape(image.caption)}" aria-label="Enlarge ${escape(image.caption)}"><img src="${escape(image.src)}" alt="${escape(image.alt)}"></button><figcaption>${escape(image.caption)}</figcaption></figure>`).join('')}</div></div>`;
     previouslyFocused = document.activeElement;
     if (!dialog.open) dialog.showModal();
+    dialog.scrollTop = 0;
     queuePointerMotion();
   }
 
@@ -312,7 +356,7 @@
     selectProject(pool[Math.floor(Math.random() * pool.length)].id, { focus: true });
   }
 
-  $('#main-cookie').addEventListener('click', () => toggleMenu());
+  $('#main-cookie').addEventListener('click', activateCookie);
   $('#back-button').addEventListener('click', () => navigate('home'));
   $('#motion-toggle').addEventListener('click', () => setMotion(!state.motion));
   $('#random-project').addEventListener('click', randomProject);
@@ -369,7 +413,8 @@
     if (state.screen === 'home') {
       if (event.key.toLowerCase() === 'p') { event.preventDefault(); navigate('projects'); }
       if (event.key.toLowerCase() === 'a') { event.preventDefault(); navigate('about'); }
-      if (event.key === 'Enter' && !event.target.closest('button,a')) { event.preventDefault(); toggleMenu(); }
+      if (event.key === 'Enter' && !event.target.closest('button,a')) { event.preventDefault(); if (!event.repeat) activateCookie(); }
+      if (event.key === 'Enter' && event.repeat && event.target.closest('#main-cookie')) event.preventDefault();
     } else if (state.screen === 'projects') {
       if (event.key === '/') { event.preventDefault(); $('#project-search').focus(); }
       if (event.key === 'F2') { event.preventDefault(); randomProject(); }
@@ -408,5 +453,14 @@
   updateClock(); setInterval(updateClock, 15000);
   const initialScreen = ['home', 'projects', 'about'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   applyScreen(initialScreen, false);
+  const connection = navigator.connection;
+  if (!connection?.saveData && !/^(slow-)?2g$/.test(connection?.effectiveType || '')) {
+    const warmWhenIdle = () => {
+      if ('requestIdleCallback' in window) window.requestIdleCallback(preloadProjectImages, { timeout: 2000 });
+      else setTimeout(preloadProjectImages, 1500);
+    };
+    if (document.readyState === 'complete') warmWhenIdle();
+    else window.addEventListener('load', warmWhenIdle, { once: true });
+  }
   requestAnimationFrame(() => document.body.classList.add('is-ready'));
 })();

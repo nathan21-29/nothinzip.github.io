@@ -24,3 +24,19 @@ body{isolation:isolate}#main-content{min-height:calc(100vh - 86px);padding-botto
 @media (max-width:800px), (hover:none), (pointer:coarse){.song-entry{--cursor-offset:0px!important}.home-stage,.site-background,.world-image,.world-pattern,.floating-shapes{translate:none}}
 .reduced-motion .song-entry{--cursor-offset:0px!important}
 .reduced-motion .home-stage,.reduced-motion .site-background,.reduced-motion .world-image,.reduced-motion .world-pattern,.reduced-motion .floating-shapes{translate:none}
+
+/* Use stable layers and a solid circular rim instead of scaling a clipped border. */
+.cookie-pulse{will-change:transform;backface-visibility:hidden}
+.cookie{border:0;padding:10px;background:#e66da6;box-shadow:0 9px 0 #a54379,0 20px 50px #10071090,inset 0 0 0 10px #fff7fb;isolation:isolate;backface-visibility:hidden;transform:translateZ(0)}
+.cookie-facets{inset:10px;border-radius:50%;clip-path:circle(50%);box-shadow:inset 0 0 0 5px #ffffff45;transform:translateZ(0);backface-visibility:hidden}
+.cookie:hover{transform:translateZ(0) scale(1.045)}
+
+/* A quiet plum fade replaces the bright, fast diagonal sweep. */
+.transition-wipe{background:#1b141e;transform:none;opacity:0;transition:opacity .28s ease-in-out}
+.transition-wipe.is-active{animation:none;opacity:1}
+
+/* Case studies lift into view as an overview, with a gently dimming backdrop. */
+.case-study-dialog[open]{animation:overviewOpen .34s cubic-bezier(.2,.75,.2,1) both}
+.case-study-dialog[open]::backdrop{animation:overviewBackdrop .28s ease-out both}
+@keyframes overviewOpen{from{opacity:0;transform:translateY(20px) scale(.975)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes overviewBackdrop{from{opacity:0}to{opacity:1}}
