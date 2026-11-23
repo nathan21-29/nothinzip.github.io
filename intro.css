@@ -1,5 +1,7 @@
 /* All startup overrides are scoped to the early head flag. Removing it restores the menu. */
+html[data-intro],html[data-intro] body{background:#000}
 html[data-intro] body{overflow:hidden}
+html[data-intro] .world,html[data-intro] .bottom-bar{opacity:var(--intro-background,0)}
 html[data-intro] .topbar,
 html[data-intro] .bottom-bar > *,
 html[data-intro] .home-tip{opacity:0;visibility:hidden}
@@ -20,9 +22,9 @@ html[data-intro="pending"] .cookie-spectrum line,
 html[data-intro="fade"] .cookie-spectrum svg,
 html[data-intro="fade"] .cookie-spectrum line{animation-play-state:paused}
 html[data-intro] .whitecat-trail{visibility:hidden}
-html[data-intro] .intro-dim{position:fixed;inset:0;z-index:0;background:#100b13;opacity:var(--intro-dim,.66);pointer-events:none}
 .intro-playfield{position:fixed;inset:0;z-index:4;overflow:hidden;pointer-events:none;contain:strict}
 .intro-playfield svg{display:block;width:100%;height:100%;overflow:visible}
+.intro-burst-star{fill:#fff}
 .intro-skin-overlay{opacity:1}
 html[data-intro="pending"] #main-cookie::before,html[data-intro="settling"] #main-cookie::before{content:'';position:absolute;inset:0;border-radius:50%;background:url('assets/whitecat/hitcircleoverlay@2x.png') center/100% 100% no-repeat,url('assets/whitecat/hitcircle@2x.png') center/100% 100% no-repeat;opacity:var(--intro-skin-opacity,1);pointer-events:none}
 .intro-approach-skin{opacity:.9}
@@ -34,5 +36,4 @@ html[data-intro="pending"] #main-cookie::before,html[data-intro="settling"] #mai
 .intro-slider-ball{fill:#aaa;stroke:#fff;stroke-width:3}
 .intro-cursor-fallback{fill:#ffe5f4;stroke:#ef81ba;stroke-width:3}
 .intro-skip{position:fixed;bottom:1.25rem;right:1.5rem;margin:0;color:#dac2d3;font:400 .75rem Aller,'Trebuchet MS',sans-serif;letter-spacing:.06em;opacity:.6}
-html[data-intro="fade"] .intro-dim{opacity:var(--intro-dim,.45)}
 @media(max-width:35rem){.intro-skip{right:1rem;bottom:1rem;font-size:.6875rem}}

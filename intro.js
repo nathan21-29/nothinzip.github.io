@@ -9,7 +9,6 @@
   const restores = [];
   let frame = 0;
   let field;
-  let dim;
   let motionObserver;
   const set = (name, value) => root.style.setProperty(`--intro-${name}`, String(value));
   const groups = [];
@@ -19,7 +18,6 @@
   function release() {
     cancelAnimationFrame(frame);
     field?.remove();
-    dim?.remove();
     motionObserver?.disconnect();
     window.removeEventListener('resize', onResize);
     window.removeEventListener('hashchange', onHistoryChange);
@@ -54,10 +52,6 @@
     }
     // Avoid focus remaining in invisible controls when replaying from a local reload.
     if (document.activeElement !== document.body) document.activeElement?.blur();
-    dim = document.createElement('div');
-    dim.className = 'intro-dim';
-    dim.setAttribute('aria-hidden', 'true');
-    document.body.append(dim);
     window.addEventListener('resize', onResize, { passive: true });
     window.addEventListener('hashchange', onHistoryChange);
     window.addEventListener('popstate', onHistoryChange);
@@ -70,6 +64,7 @@
       set('profile', progress);
       set('footer', progress);
       set('hint', progress);
+      set('background', progress);
       if (reduced) {
         set('profile-y', '0px'); set('footer-y', '0px');
       }
@@ -84,7 +79,7 @@
         reveal(p, true);
         set('logo-opacity', p); set('word', 1); set('word-scale', 1);
         set('facets', .7); set('depth', 1); set('fill', '#e66da6');
-        set('spectrum', p); set('spectrum-scale', 1); set('halo', p); set('dim', .45 * (1 - p));
+        set('spectrum', p); set('spectrum-scale', 1); set('halo', p);
         if (p === 1) intro.finish();
         else frame = requestAnimationFrame(fade);
       };
@@ -104,6 +99,57 @@
       parent.append(node);
       return node;
     };
+    // Undo the gameplay transform: bursts originate at the actual viewport edges.
+    const burst = create('g', {
+      class: 'intro-star-burst',
+      transform: `scale(${1 / scale}) translate(${-center.x} ${-center.y})`
+    });
+    const flash = create('rect', {
+      class: 'intro-hit-flash', x: 0, y: 0, width: innerWidth, height: innerHeight,
+      fill: '#fff', opacity: 0
+    }, burst);
+    const starPoints = Array.from({ length: 10 }, (_, index) => {
+      const angle = index * Math.PI / 5 - Math.PI / 2;
+      const r = index % 2 ? .44 : 1;
+      return `${Math.cos(angle) * r},${Math.sin(angle) * r}`;
+    }).join(' ');
+    const starsPerSide = innerWidth < 600 ? 24 : 42;
+    const stars = [];
+    // Fixed variations keep replay frames stable without a second animation loop.
+    const variation = (index, salt) => ((index * salt + 17) % 101) / 100;
+    for (const side of [-1, 1]) {
+      for (let index = 0; index < starsPerSide; index++) {
+        const seed = index + (side === 1 ? 47 : 0);
+        stars.push({
+          node: create('polygon', { points: starPoints, class: 'intro-burst-star', opacity: 0 }, burst),
+          side,
+          delay: variation(seed, 37) * 130,
+          lifetime: 700 + variation(seed, 29) * 170,
+          y: innerHeight * (.74 + variation(seed, 43) * .24),
+          travel: innerWidth * (.22 + variation(seed, 61) * .26),
+          rise: innerHeight * (.27 + variation(seed, 53) * .44),
+          size: (3 + variation(seed, 19) ** 1.7 * 12) * Math.min(1, innerWidth / 700),
+          brightness: .2 + variation(seed, 71) * .8,
+          rotation: variation(seed, 31) * 360,
+          spin: (variation(seed, 67) - .5) * 220
+        });
+      }
+    }
+
+    function drawBurst(time) {
+      const hitAge = time - T.final.hit;
+      flash.setAttribute('opacity', .22 * T.clamp(hitAge / 45) * (1 - T.ease((hitAge - 45) / 420)));
+      for (const star of stars) {
+        const age = time - T.final.hit - star.delay;
+        const p = T.clamp(age / star.lifetime);
+        const travel = 1 - (1 - p) ** 2;
+        const x = (star.side === -1 ? -12 : innerWidth + 12) - star.side * star.travel * travel;
+        const y = star.y - star.rise * (1.6 * p - .6 * p * p);
+        const opacity = age < 0 ? 0 : star.brightness * T.clamp(age / 55) * (1 - T.clamp((p - .5) / .5));
+        star.node.setAttribute('opacity', opacity);
+        star.node.setAttribute('transform', `translate(${x} ${y}) rotate(${star.rotation + star.spin * p}) scale(${star.size * (1 - .35 * p)})`);
+      }
+    }
     const approach = parent => {
       const group = create('g', {}, parent);
       create('image', { href: 'assets/whitecat/approachcircle@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-approach-skin' }, group);
@@ -174,11 +220,11 @@
       set('depth', morph); set('halo', T.ease((time - 3150) / 520));
       set('spectrum', T.ease((time - 3140) / 600));
       set('spectrum-scale', T.mix(.72, 1, T.ease((time - 3140) / 600)));
-      set('dim', .66 * (1 - T.ease((time - 2880) / 850)));
       if (time >= 3100) root.dataset.intro = 'settling';
       const profile = T.clamp((time - 3100) / 650);
       const footer = T.clamp((time - 3180) / 650);
       reveal(profile);
+      drawBurst(time);
       set('footer', T.ease(footer)); set('hint', T.ease((time - 3480) / 360));
       // Fast ease-out with one small, damped settle, matching the menu transitions.
       const settle = progress => progress < .7 ? T.mix(-1, .018, T.ease(progress / .7)) : .018 * (1 - T.ease((progress - .7) / .3));

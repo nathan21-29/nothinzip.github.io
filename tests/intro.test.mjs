@@ -181,7 +181,7 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, systemRed
     console: { warn(...args) { warnings.push(args); } }
   };
   vm.runInNewContext(runtimeSource, context);
-  return { intro, frames, listeners, motionListeners, warnings, values, writes, style, root, body, field: created.find(node => node.className === 'intro-playfield'), dim: created.find(node => node.className === 'intro-dim'), inertElements };
+  return { intro, frames, listeners, motionListeners, warnings, values, writes, style, root, body, field: created.find(node => node.className === 'intro-playfield'), inertElements };
 }
 
 function runFrame(fixture, timestamp) {
@@ -191,11 +191,61 @@ function runFrame(fixture, timestamp) {
   entry[1](timestamp);
 }
 
+function descendants(node) {
+  return node.children.flatMap(child => [child, ...descendants(child)]);
+}
+
+test('Background stays black through gameplay and fades in with the menu', () => {
+  const fixture = runtimeFixture();
+  runFrame(fixture, 0);
+  runFrame(fixture, 2820);
+  assert.equal(fixture.values.get('--intro-background'), '0');
+  runFrame(fixture, 3100);
+  assert.equal(fixture.values.get('--intro-background'), '0');
+  runFrame(fixture, 3300);
+  const opacity = Number(fixture.values.get('--intro-background'));
+  assert.ok(opacity > 0 && opacity < 1);
+  assert.equal(fixture.values.get('--intro-background'), fixture.values.get('--intro-profile'));
+  runFrame(fixture, 3830);
+  assert.equal(fixture.values.get('--intro-background'), '1');
+  fixture.intro.finish();
+  assert.equal(fixture.values.has('--intro-background'), false);
+});
+
+test('Final hit flashes softly and sends varied stars inward from both lower edges', () => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    const fixture = runtimeFixture(viewport);
+    const nodes = descendants(fixture.field);
+    const stars = nodes.filter(node => node.getAttribute('class') === 'intro-burst-star');
+    const flash = nodes.find(node => node.getAttribute('class') === 'intro-hit-flash');
+    assert.ok(stars.length >= 48);
+    runFrame(fixture, 0);
+    runFrame(fixture, 2819);
+    assert.ok(stars.every(star => star.getAttribute('opacity') === '0'));
+    assert.equal(flash.getAttribute('opacity'), '0');
+    runFrame(fixture, 2865);
+    assert.equal(Number(flash.getAttribute('opacity')), .22);
+    runFrame(fixture, 3100);
+    const positions = stars.map(star => star.getAttribute('transform').match(/translate\(([-\d.]+) ([-\d.]+)\)/).slice(1).map(Number));
+    assert.ok(stars.every(star => Number(star.getAttribute('opacity')) > 0));
+    assert.ok(new Set(stars.map(star => star.getAttribute('opacity'))).size > 10);
+    assert.ok(new Set(stars.map(star => star.getAttribute('transform').split('scale(')[1])).size > 10);
+    const left = positions.slice(0, stars.length / 2), right = positions.slice(stars.length / 2);
+    assert.ok(left.every(([x]) => x > 0 && x < viewport.width / 2));
+    assert.ok(right.every(([x]) => x > viewport.width / 2 && x < viewport.width));
+    assert.ok(positions.every(([, y]) => y < viewport.height));
+    runFrame(fixture, 3830);
+    assert.ok(stars.every(star => star.getAttribute('opacity') === '0'));
+    assert.equal(flash.getAttribute('opacity'), '0');
+    fixture.intro.finish();
+    assert.equal(fixture.field.removed, true);
+  }
+});
+
 test('Runtime renders through the final cookie morph and restores inert state', () => {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
   const fixture = runtimeFixture(viewport);
   assert.ok(fixture.field);
-  assert.ok(fixture.dim);
   assert.ok(fixture.inertElements.every(element => element.inert));
   runFrame(fixture, 100); // establish the clock origin
   runFrame(fixture, 3700); // elapsed 3600ms: the logo has reached its final pose
@@ -207,7 +257,6 @@ test('Runtime renders through the final cookie morph and restores inert state', 
   assert.ok(fixture.inertElements[0].inert);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
   assert.equal(fixture.field.removed, true);
-  assert.equal(fixture.dim.removed, true);
   assert.equal([...fixture.style].some(key => key.startsWith('--intro-')), false);
   assert.deepEqual(fixture.warnings, []);
   }
@@ -217,7 +266,6 @@ test('Short landscape windows with offscreen logos remain usable', () => {
   const fixture = runtimeFixture({ width: 844, height: 390, offscreen: true });
   assert.equal(fixture.intro.active, false);
   assert.equal(fixture.field, undefined);
-  assert.equal(fixture.dim, undefined);
   assert.equal(fixture.frames.size, 0);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
 });
@@ -239,7 +287,6 @@ test('Runtime skip cancels the scheduled frame and releases all overlays', () =>
   assert.equal(fixture.intro.active, false);
   assert.equal(fixture.frames.size, 0);
   assert.equal(fixture.field.removed, true);
-  assert.equal(fixture.dim.removed, true);
   assert.ok(fixture.inertElements[0].inert);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
 });
@@ -250,7 +297,6 @@ test('Runtime failures restore the page instead of leaving it hidden', () => {
   assert.equal(fixture.warnings.length, 1);
   assert.ok(fixture.inertElements[0].inert);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
-  assert.equal(fixture.dim?.removed, true);
 });
 
 test('Runtime resize finishes safely at desktop and mobile viewport sizes', () => {
@@ -260,7 +306,6 @@ test('Runtime resize finishes safely at desktop and mobile viewport sizes', () =
     fixture.listeners.get('resize')();
     assert.equal(fixture.intro.active, false);
     assert.equal(fixture.field.removed, true);
-    assert.equal(fixture.dim.removed, true);
     assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
     assert.deepEqual(fixture.warnings, []);
   }
