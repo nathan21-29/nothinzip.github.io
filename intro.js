@@ -15,6 +15,7 @@
   const set = (name, value) => root.style.setProperty(`--intro-${name}`, String(value));
   const groups = [];
   const radius = T.diameter / 2;
+  const trailInterval = 1000 / 30;
   let start;
 
   function clearField() {
@@ -147,7 +148,7 @@
     const cursorImage = new Image();
     cursorImage.onload = () => { cursorFallback.setAttribute('opacity', 0); };
     cursorImage.src = 'assets/whitecat/cursor-0.7x.png';
-    const trailSprites = Array.from({ length: 10 }, () => create('image', {
+    const trailSprites = Array.from({ length: Math.ceil(150 / trailInterval) }, () => create('image', {
       href: 'assets/whitecat/cursortrail@2x.png', x: -22.4, y: -22.4, width: 44.8, height: 44.8, opacity: 0
     }, trail));
 
@@ -212,8 +213,8 @@
       cursorSprite.setAttribute('transform', `scale(${pressScale})`);
       cursor.setAttribute('transform', `translate(${point.x} ${point.y})`);
       trailSprites.forEach((sprite, index) => {
-        // Reconstruct fixed 60 Hz samples from the master clock, even after a slow frame.
-        const sample = Math.floor(time / (1000 / 60)) * (1000 / 60) - index * (1000 / 60);
+        // Reconstruct fixed 30 Hz samples from the master clock, even after a slow frame.
+        const sample = Math.floor(time / trailInterval) * trailInterval - index * trailInterval;
         const position = T.cursorAt(sample);
         sprite.setAttribute('transform', `translate(${position.x} ${position.y})`);
         sprite.setAttribute('opacity', sample < 100 ? 0 : cursorOpacity * .55 * (1 - T.clamp((time - sample) / 150)));

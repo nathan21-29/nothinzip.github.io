@@ -30,6 +30,29 @@ In the repository's **Settings > Pages**, choose **Deploy from a branch**, then 
 
 Edit project titles, descriptions, credits, and image paths in `projects.js`. Personal text and links are in `index.html`, and visual styles are in `styles.css`.
 
+## Photography
+
+The Photography link in About opens `#photography` with the shared screen and
+footer transitions. A flat Japan map filters photos by Hokkaido, Gifu, Ine,
+Nagoya, Osaka, Tokyo, Kyoto, or Nara. All photos restores the shuffled mix.
+The vertical carousel fades at both edges, pauses for browsing, and opens
+originals in the shared image viewer. Back or Escape returns to About.
+
+Add photos to the matching folders in `assets/photography/`, then run
+`npm run photos` to refresh `photography-photos.js`. `npm start` refreshes it
+automatically before serving. Optional captions and alt text are described in
+[the photo folder guide](assets/photography/README.md).
+
+The included WebP previews reduce gallery image downloads from about 67 MB to
+6.3 MB; originals remain unchanged. To prepare previews after adding photos,
+install Pillow (`python -m pip install Pillow`), run
+`python scripts/prepare-photo-previews.py`, then `npm run photos`.
+Photos without a prepared preview still work using the original image.
+Commit the images, previews, and generated index together for GitHub Pages.
+
+The map's mainland and Hokkaido silhouette is simplified from the public-domain
+[Natural Earth 1:50m country dataset](https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_50m_admin_0_countries.geojson).
+
 ## Live osu! stats
 
 The header can display osu!standard level, level progress, and pp through a separate Cloudflare Worker. Follow [the setup instructions](workers/osu-stats/README.md). The site sends no stats request until the Worker's public URL is configured in `index.html`.

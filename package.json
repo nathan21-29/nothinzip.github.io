@@ -4,6 +4,8 @@
   "private": true,
   "description": "An osu!stable-inspired personal portfolio for Nathan Chan.",
   "scripts": {
+    "photos": "node scripts/index-photos.mjs",
+    "prestart": "npm run photos",
     "start": "node server.mjs",
     "check": "node checks.mjs && node --check server.mjs && node --test tests/*.test.mjs"
   }

@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   const projects = window.PORTFOLIO_PROJECTS || [];
+  const screenNames = ['home', 'projects', 'about', 'photography'];
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
   const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -23,6 +24,7 @@
   let pointerFrame = 0;
   let pointerPosition = null;
   const cursorGravity = { y: null, strength: 0, time: 0 };
+  let cardOffsetsActive = false;
   let previewRequest = 0;
   let previewAnimation;
   let previewProjectId;
@@ -81,15 +83,21 @@
       cursorGravity.y = null;
       cursorGravity.strength = 0;
     }
-    const uiScale = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
-    const entries = $$('.song-entry').map(entry => {
-      const card = entry.querySelector('.song-card').getBoundingClientRect();
-      const distance = cursorGravity.y === null ? Infinity : Math.abs(cursorGravity.y - (card.top + card.height / 2));
-      const proximity = Math.max(0, 1 - distance / (320 * uiScale));
-      const pull = (1 - Math.cos(Math.PI * proximity)) / 2;
-      return { entry, offset: -Math.min(88 * uiScale, window.innerWidth * .061) * pull * cursorGravity.strength };
-    });
-    for (const { entry, offset } of entries) entry.style.setProperty('--cursor-offset', `${offset.toFixed(2)}px`);
+    if (state.screen === 'projects' && (projectsActive || cursorGravity.strength)) {
+      const uiScale = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
+      const entries = $$('.song-entry').map(entry => {
+        const card = entry.querySelector('.song-card').getBoundingClientRect();
+        const distance = cursorGravity.y === null ? Infinity : Math.abs(cursorGravity.y - (card.top + card.height / 2));
+        const proximity = Math.max(0, 1 - distance / (320 * uiScale));
+        const pull = (1 - Math.cos(Math.PI * proximity)) / 2;
+        return { entry, offset: -Math.min(88 * uiScale, window.innerWidth * .061) * pull * cursorGravity.strength };
+      });
+      for (const { entry, offset } of entries) entry.style.setProperty('--cursor-offset', `${offset.toFixed(2)}px`);
+      cardOffsetsActive = true;
+    } else if (cardOffsetsActive) {
+      for (const entry of $$('.song-entry')) entry.style.setProperty('--cursor-offset', '0px');
+      cardOffsetsActive = false;
+    }
     if (cursorGravity.strength !== targetStrength || (projectsActive && cursorGravity.y !== pointerPosition.y)) {
       pointerFrame = requestAnimationFrame(updatePointerMotion);
     } else if (!projectsActive) {
@@ -238,6 +246,8 @@
 
   function setMotion(enabled, persist = true) {
     state.motion = enabled;
+    window.HomeSpectrum?.setMotion(enabled);
+    window.PhotoGallery?.setMotion(enabled);
     document.body.classList.toggle('reduced-motion', !enabled);
     document.body.classList.toggle('motion-enabled', enabled);
     $('#motion-toggle').setAttribute('aria-pressed', String(enabled));
@@ -315,8 +325,10 @@
       $('#project-preview').inert = false;
     }
     document.body.dataset.screen = screen;
+    window.HomeSpectrum?.setActive(screen === 'home');
     $('#profile-dropdown').hidden = screen !== 'about';
-    for (const name of ['home', 'projects', 'about']) $(`#${name}-screen`).hidden = name !== screen;
+    for (const name of screenNames) $(`#${name}-screen`).hidden = name !== screen;
+    window.PhotoGallery?.setActive(screen === 'photography');
     $('#back-button').hidden = screen === 'home';
     $('#signature').hidden = screen !== 'home';
     $('#project-toolbar').hidden = screen !== 'projects';
@@ -325,7 +337,7 @@
     if (screen === 'projects') renderProjects();
     if (screen === 'home') toggleMenu(state.menuOpen);
     updateBackdrop();
-    document.title = `Nathan Chan · ${screen === 'projects' ? 'project select' : screen === 'about' ? 'about me' : 'a few things I’ve made'}`;
+    document.title = `Nathan Chan · ${screen === 'projects' ? 'project select' : screen === 'about' ? 'about me' : screen === 'photography' ? 'photography' : 'a few things I’ve made'}`;
     const panel = $(`#${screen}-screen`);
     panel.classList.remove('entering');
     const currentNavigation = navigationId;
@@ -368,7 +380,7 @@
   }
 
   function navigate(screen, { push = true } = {}) {
-    if (!['home', 'projects', 'about'].includes(screen)) return;
+    if (!screenNames.includes(screen)) return;
     if (pendingScreen === screen) return;
     if (screen === 'projects') preloadProjectImages();
     const id = ++navigationId;
@@ -376,7 +388,13 @@
     if (push && location.hash !== `#${screen}`) {
       try { history.pushState({ screen }, '', `#${screen}`); } catch { /* Works directly from a local file too. */ }
     }
-    if (screen === state.screen) { pendingScreen = null; $('#transition-wipe').classList.remove('is-active'); return; }
+    if (screen === state.screen) {
+      pendingScreen = null;
+      $('#transition-wipe').classList.remove('is-active');
+      window.PhotoGallery?.setActive(screen === 'photography');
+      return;
+    }
+    window.PhotoGallery?.setActive(false);
     if (screen === 'home') state.menuOpen = true;
     const wipe = $('#transition-wipe');
     if (!state.motion) { pendingScreen = null; wipe.classList.remove('is-active'); applyScreen(screen); return; }
@@ -580,12 +598,20 @@
     queuePointerMotion();
   }
 
-  function openImage(button) {
+  let imageViewerRequest = 0;
+  async function openImage(button) {
+    const request = ++imageViewerRequest;
     resetProjectScroll();
-    $('#lightbox-image').src = button.dataset.image;
-    $('#lightbox-image').alt = button.dataset.imageAlt || '';
+    const selectedImage = new Image();
+    selectedImage.src = button.dataset.image;
+    selectedImage.alt = button.dataset.imageAlt || '';
+    try { await selectedImage.decode(); }
+    catch { return; }
+    if (request !== imageViewerRequest || !button.isConnected) return;
+    selectedImage.id = 'lightbox-image';
+    $('#lightbox-image').replaceWith(selectedImage);
     $('#lightbox-caption').textContent = button.dataset.imageCaption || '';
-    $('#lightbox').showModal();
+    if (!$('#lightbox').open) $('#lightbox').showModal();
     queuePointerMotion();
   }
 
@@ -627,7 +653,8 @@
   }
 
   $('#main-cookie').addEventListener('click', activateCookie);
-  $('#back-button').addEventListener('click', () => navigate('home'));
+  function goBack() { navigate(state.screen === 'photography' ? 'about' : 'home'); }
+  $('#back-button').addEventListener('click', goBack);
   $('#motion-toggle').addEventListener('click', () => setMotion(!state.motion));
   $('#random-project').addEventListener('click', randomProject);
   $('#show-case-study').addEventListener('click', () => openCaseStudy());
@@ -667,7 +694,13 @@
   document.addEventListener('click', event => {
     const target = event.target.closest('button,a');
     if (!target) return;
-    if (target.dataset.go) navigate(target.dataset.go);
+    if (target.dataset.go) {
+      if (target.tagName === 'A') {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+      }
+      navigate(target.dataset.go);
+    }
     if (target.hasAttribute('data-filter')) {
       state.filter = target.dataset.filter;
       $$('[data-filter]').forEach(button => { const active = button === target; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
@@ -704,7 +737,7 @@
         search.dispatchEvent(new Event('input', { bubbles: true }));
         search.focus({ preventScroll: true });
       }
-      else if (state.screen !== 'home') navigate('home');
+      else if (state.screen !== 'home') goBack();
       else if (state.menuOpen) { toggleMenu(false); $('#main-cookie').focus(); }
       event.preventDefault(); return;
     }
@@ -738,21 +771,12 @@
 
   function onHistoryChange() {
     const screen = location.hash.slice(1);
-    if (['home', 'projects', 'about'].includes(screen) && (screen !== state.screen || pendingScreen)) navigate(screen, { push: false });
+    if (screenNames.includes(screen) && (screen !== state.screen || pendingScreen)) navigate(screen, { push: false });
     if (!screen && (state.screen !== 'home' || pendingScreen)) navigate('home', { push: false });
   }
   window.addEventListener('popstate', onHistoryChange);
   window.addEventListener('hashchange', onHistoryChange);
   function buildDecorations() {
-    let lines = '';
-    for (let i = 0; i < 120; i++) {
-      const angle = i * 3;
-      const length = 9 + (Math.sin(i * 2.37) + 1) * 21 + (i % 7 === 0 ? 12 : 0);
-      const duration = 1.1 + (i % 11) * 0.093;
-      const delay = -(i * 0.137 + Math.sin(i * 0.73) * 0.4);
-      lines += `<g transform="rotate(${angle} 300 300)"><line x1="300" y1="79" x2="300" y2="${79 - length}" style="--bar-duration:${duration}s;--bar-delay:${delay}s;--bar-opacity:${0.22 + (i % 5) * 0.07}"/></g>`;
-    }
-    $('#cookie-spectrum').innerHTML = `<svg viewBox="0 0 600 600" aria-hidden="true">${lines}</svg>`;
     $('#floating-shapes').innerHTML = Array.from({ length: 14 }, (_, i) => `<span style="--shape-x:${(i * 29 + 7) % 100}%;--shape-y:${(i * 37 + 11) % 100}%;--shape-size:${14 + (i % 5) * 8}px;--shape-duration:${18 + i % 9}s;--shape-delay:-${i * 2.1}s"></span>`).join('');
   }
   function updateClock() { $('#footer-clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }); }
@@ -760,7 +784,7 @@
   $('[data-filter="all"] span').textContent = String(projects.length);
   setMotion(state.motion, false);
   updateClock(); setInterval(updateClock, 15000);
-  const initialScreen = ['home', 'projects', 'about'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
+  const initialScreen = screenNames.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'home';
   applyScreen(initialScreen, false);
   const connection = navigator.connection;
   if (!connection?.saveData && !/^(slow-)?2g$/.test(connection?.effectiveType || '')) {

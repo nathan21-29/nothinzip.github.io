@@ -10,13 +10,14 @@ const html = readFileSync(resolve(dist, 'index.html'), 'utf8');
 const app = readFileSync(resolve(dist, 'app.js'), 'utf8');
 const css = readFileSync(resolve(dist, 'styles.css'), 'utf8');
 const introCSS = readFileSync(resolve(dist, 'intro.css'), 'utf8');
+const photographyCSS = readFileSync(resolve(dist, 'photography.css'), 'utf8');
 const data = readFileSync(resolve(dist, 'projects.js'), 'utf8');
 let count = 0;
 function check(name, test) { test(); count++; console.log(`PASS ${name}`); }
 
 check('Application JavaScript parses', () => new vm.Script(app));
-check('Startup and cursor JavaScript parse', () => {
-  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro-stars.js', 'intro.js', 'cursor.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
+check('Startup, cursor and photography JavaScript parse', () => {
+  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro-stars.js', 'intro.js', 'cursor.js', 'photography-data.js', 'photography-photos.js', 'photography.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
 });
 const context = { window: {} };
 vm.createContext(context);
@@ -54,8 +55,31 @@ check('All local HTML assets exist', () => {
     assert.ok(existsSync(resolve(dist, value)), value);
   }
 });
+check('Photography locations and original/preview assets are valid', () => {
+  const photography = { window: {} };
+  vm.createContext(photography);
+  for (const file of ['photography-data.js', 'photography-photos.js']) vm.runInContext(readFileSync(resolve(dist, file), 'utf8'), photography);
+  const locations = photography.window.PHOTOGRAPHY_LOCATIONS;
+  const photos = photography.window.PHOTOGRAPHY_PHOTOS;
+  const ids = new Set(locations.map(location => location.id));
+  assert.equal(ids.size, locations.length);
+  assert.equal(new Set(photos.map(photo => photo.id)).size, photos.length);
+  for (const location of locations) {
+    assert.ok(location.name && Number.isFinite(location.latitude) && Number.isFinite(location.longitude));
+    assert.equal(location.label.length, 2);
+  }
+  for (const photo of photos) {
+    assert.ok(ids.has(photo.city), photo.id);
+    assert.ok(photo.alt, photo.id);
+    for (const value of [photo.src, photo.preview].filter(Boolean)) {
+      const path = resolve(dist, decodeURIComponent(value));
+      assert.ok(path.startsWith(dist + (process.platform === 'win32' ? '\\' : '/')), value);
+      assert.ok(existsSync(path), value);
+    }
+  }
+});
 check('All stylesheet image assets exist', () => {
-  for (const [, path] of (css + introCSS).matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g)) assert.ok(existsSync(resolve(dist, path)), path);
+  for (const [, path] of (css + introCSS + photographyCSS).matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g)) assert.ok(existsSync(resolve(dist, path)), path);
 });
 check('Startup skin assets exist', () => {
   for (const file of ['cursor-0.7x.png', 'cursortrail@2x.png', 'approachcircle@2x.png', 'hitcircleoverlay@2x.png']) assert.ok(existsSync(resolve(dist, 'assets/whitecat', file)), file);

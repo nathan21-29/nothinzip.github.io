@@ -5,9 +5,9 @@
   const SIZE = .7;
   const PRESS_DURATION = 200;
   const PRESS_SCALE = 1.2;
-  // Classic osu! trails without cursormiddle are sampled at 60 Hz.
+  // Sample the trail at 30 Hz while keeping the cursor at the display refresh rate.
   // Each snapshot stays at its original position; faster movement naturally leaves wider gaps.
-  const SAMPLE_INTERVAL = 1000 / 60;
+  const SAMPLE_INTERVAL = 1000 / 30;
   const FADE_DURATION = 150;
   const TRAIL_SIZE = 64 * SIZE;
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
@@ -35,9 +35,9 @@
   let pointerPosition = null;
   let points = [];
   let pressed = false;
-  let pressFrame = 0;
   let pressTransition = null;
   let cursorFrameIndex = -1;
+  let paintedBounds = null;
 
   canvas.className = 'whitecat-trail';
   canvas.setAttribute('aria-hidden', 'true');
@@ -58,6 +58,7 @@
     lastPosition = null;
     lastSample = -Infinity;
     render(performance.now());
+    if (pressTransition) queueDraw();
   }
 
   function applyCursorScale(scale) {
@@ -65,7 +66,6 @@
       Math.round((scale - 1) / (PRESS_SCALE - 1) * (pressFrames.length - 1))));
     if (index === cursorFrameIndex) return;
     cursorFrameIndex = index;
-    render(performance.now());
   }
 
   function currentPressScale(time) {
@@ -76,40 +76,26 @@
     return pressTransition.from + (pressTransition.to - pressTransition.from) * eased;
   }
 
-  function animatePress(time) {
-    pressFrame = 0;
-    applyCursorScale(currentPressScale(time));
-    if (time - pressTransition.start < PRESS_DURATION) {
-      pressFrame = requestAnimationFrame(animatePress);
-    } else {
-      pressTransition = null;
-    }
-  }
-
   function setPressed(nextPressed) {
     if (pressed === nextPressed) return;
     const time = performance.now();
     const from = currentPressScale(time);
     pressed = nextPressed;
-    cancelAnimationFrame(pressFrame);
-    pressFrame = 0;
     pressTransition = null;
     const to = pressed ? PRESS_SCALE : 1;
-    if (!enabled) { applyCursorScale(to); return; }
+    if (!enabled) { applyCursorScale(to); queueDraw(); return; }
     // Reversing a quick press starts from the current size without snapping.
     pressTransition = { from, to, start: time };
     applyCursorScale(from);
-    pressFrame = requestAnimationFrame(animatePress);
+    queueDraw();
   }
 
   function resetPointer() {
     pointerPosition = null;
-    clearTrail();
     pressed = false;
-    cancelAnimationFrame(pressFrame);
-    pressFrame = 0;
     pressTransition = null;
     applyCursorScale(1);
+    clearTrail();
   }
 
   function resize() {
@@ -118,6 +104,7 @@
     canvas.width = Math.round(innerWidth * ratio);
     canvas.height = Math.round(innerHeight * ratio);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    paintedBounds = null; // Resizing already clears the backing store.
     clearTrail();
   }
 
@@ -128,37 +115,65 @@
     root.classList.toggle('whitecat-cursor', imagesReady && finePointer.matches);
     if (!finePointer.matches) pointerPosition = null;
     if (!enabled) {
-      clearTrail();
-      cancelAnimationFrame(pressFrame);
-      pressFrame = 0;
       pressTransition = null;
       if (!finePointer.matches) pressed = false;
       applyCursorScale(pressed ? PRESS_SCALE : 1);
+      clearTrail();
+    }
+  }
+
+  function drawSprite(image, x, y, size) {
+    context.drawImage(image, x - size / 2, y - size / 2, size, size);
+    // Include an antialiasing margin, including at fractional display scales.
+    const left = Math.floor(x - size / 2) - 1;
+    const top = Math.floor(y - size / 2) - 1;
+    const right = Math.ceil(x + size / 2) + 1;
+    const bottom = Math.ceil(y + size / 2) + 1;
+    if (!paintedBounds) paintedBounds = { left, top, right, bottom };
+    else {
+      paintedBounds.left = Math.min(paintedBounds.left, left);
+      paintedBounds.top = Math.min(paintedBounds.top, top);
+      paintedBounds.right = Math.max(paintedBounds.right, right);
+      paintedBounds.bottom = Math.max(paintedBounds.bottom, bottom);
     }
   }
 
   function render(time) {
-    context.clearRect(0, 0, innerWidth, innerHeight);
+    // Erase only the previous sprites rather than the entire viewport.
+    if (paintedBounds) {
+      const { left, top, right, bottom } = paintedBounds;
+      context.clearRect(left, top, right - left, bottom - top);
+      paintedBounds = null;
+    }
     if (window.SiteIntro?.active) return;
     points = points.filter(point => time - point.time < FADE_DURATION);
     for (const point of points) {
       const age = Math.max(0, time - point.time) / FADE_DURATION;
       context.globalAlpha = .65 * (1 - age);
       // Draw independent, fixed-size sprites with normal blending, never a connecting path.
-      context.drawImage(trailImage, point.x - TRAIL_SIZE / 2, point.y - TRAIL_SIZE / 2, TRAIL_SIZE, TRAIL_SIZE);
+      drawSprite(trailImage, point.x, point.y, TRAIL_SIZE);
     }
     context.globalAlpha = 1;
     if (imagesReady && finePointer.matches && pointerPosition) {
       const { image, size } = pressFrames[Math.max(0, cursorFrameIndex)];
       const sprite = image.complete && image.naturalWidth ? image : cursorImage;
-      context.drawImage(sprite, pointerPosition.x - size / 2, pointerPosition.y - size / 2, size, size);
+      drawSprite(sprite, pointerPosition.x, pointerPosition.y, size);
     }
   }
 
   function draw(time) {
     frame = 0;
+    if (pressTransition) {
+      applyCursorScale(currentPressScale(time));
+      if (time - pressTransition.start >= PRESS_DURATION) pressTransition = null;
+    }
     render(time);
-    if (points.length) frame = requestAnimationFrame(draw);
+    if (points.length || pressTransition) queueDraw();
+  }
+
+  function queueDraw() {
+    // High-polling-rate mice can emit many events between display refreshes.
+    if (!frame) frame = requestAnimationFrame(draw);
   }
 
   document.addEventListener('pointermove', event => {
@@ -173,8 +188,8 @@
     }
     const time = performance.now();
     pointerPosition = { x: event.clientX, y: event.clientY };
-    // Update on every pointer event, independently of the trail's 60 Hz sampling.
-    render(time);
+    if (window.SiteIntro?.active) return;
+    queueDraw();
     if (!enabled) return;
     if (lastPosition?.x === event.clientX && lastPosition?.y === event.clientY) return;
     if (time - lastSample < SAMPLE_INTERVAL - .01) return;
@@ -185,7 +200,6 @@
       : time;
     lastPosition = { x: event.clientX, y: event.clientY };
     points.push({ ...lastPosition, time });
-    if (!frame) frame = requestAnimationFrame(draw);
   }, { passive: true });
 
   document.addEventListener('pointerdown', event => {
