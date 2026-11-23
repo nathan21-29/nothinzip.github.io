@@ -24,6 +24,15 @@
         return image;
       };
       const boards = [];
+      const styles = new WeakMap();
+      const style = (node, name, value) => {
+        const previous = styles.get(node) ?? {};
+        if (previous[name] === value) return;
+        previous[name] = value;
+        styles.set(node, previous);
+        if (name.startsWith('--')) node.style.setProperty(name, value);
+        else node.style[name] = value;
+      };
       const board = (name, delay, edge) => {
         const node = element('div', `intro-hud-board intro-hud-${name}`, hud);
         const content = element('div', 'intro-hud-content', node);
@@ -36,10 +45,12 @@
         let previous;
         return value => {
           if (value === previous) return;
+          const before = previous;
           previous = value;
           row.setAttribute('data-value', value);
           for (let index = 0; index < digits.length; index++) {
             const char = value[index];
+            if (before !== undefined && char === before[index]) continue;
             digits[index].style.display = char === undefined ? 'none' : '';
             if (char !== undefined) {
               const name = char === '.' ? 'dot' : char === '%' ? 'percent' : char;
@@ -83,7 +94,7 @@
         labelNode.textContent = label;
         const count = element('span', 'intro-hud-key-count', row);
         count.textContent = '0';
-        return { row, count };
+        return { row, count, presses: 0, down: null };
       });
       const events = [
         ...timeline.circles.map((point, index) => ({ time: point.hit, score: [300, 624, 972][index], key: index % 2 })),
@@ -92,8 +103,14 @@
         { time: timeline.slider.end, score: 1042 },
         { time: timeline.final.hit, score: 1558, key: 0 }
       ];
+      setAccuracy('100.00%');
+      let finished = false;
+      let previousProgress;
+      const dispose = () => { finished = true; hud.remove(); };
       return {
+        dispose,
         draw(time) {
+          if (finished) return;
           const hits = events.filter(event => event.time <= time);
           const last = hits.at(-1);
           const age = last ? time - last.time : Infinity;
@@ -101,32 +118,38 @@
           const lastScore = hits.at(-2)?.score ?? 0;
           const animatedScore = Math.round(timeline.mix(lastScore, last?.score ?? 0, timeline.ease(age / 100)));
           setScore(String(animatedScore).padStart(8, '0'));
-          setAccuracy('100.00%');
           setCombo(`${hits.length}x`);
-          combo.style.setProperty('--hud-combo-pulse', 1 + .12 * hitPulse);
+          style(combo, '--hud-combo-pulse', 1 + .12 * hitPulse);
           const songProgress = timeline.clamp(time / timeline.final.hit);
           const angle = Math.PI * 2 * songProgress;
-          progressFill.setAttribute('d', songProgress === 1
+          if (songProgress !== previousProgress) progressFill.setAttribute('d', songProgress === 1
             ? 'M32 18 A14 14 0 1 1 4 18 A14 14 0 1 1 32 18 Z'
             : `M18 18 L32 18 A14 14 0 ${songProgress > .5 ? 1 : 0} 1 ${18 + 14 * Math.cos(angle)} ${18 + 14 * Math.sin(angle)} Z`);
-          keyRows.forEach(({ row, count }, index) => {
+          previousProgress = songProgress;
+          keyRows.forEach((key, index) => {
+            const { row, count } = key;
             const presses = hits.filter(event => event.key === index);
-            count.textContent = String(presses.length);
+            if (key.presses !== presses.length) count.textContent = String(presses.length);
+            key.presses = presses.length;
             const lastPress = presses.at(-1);
             const held = index === 1 && time >= timeline.slider.start && time < timeline.slider.end;
             const down = held || !!lastPress && time - lastPress.time < 95;
-            row.setAttribute('data-down', down ? 'true' : 'false');
-            row.style.transform = `scale(${down ? .94 : 1})`;
+            if (key.down !== down) {
+              row.setAttribute('data-down', down ? 'true' : 'false');
+              style(row, 'transform', `scale(${down ? .94 : 1})`);
+              key.down = down;
+            }
           });
           for (const { node, delay, edge } of boards) {
             const fall = timeline.clamp((time - timeline.final.hit - delay) / 480);
             // The screen edge is the fixed hinge; the free edge swings backward toward it.
             const angle = 104 * fall ** 1.6;
             const rotation = edge === 'right' ? `rotateY(${-angle}deg)` : `rotateX(${edge === 'top' ? -angle : angle}deg)`;
-            node.style.transform = `perspective(700px) ${rotation}`;
-            node.style.opacity = String(timeline.clamp(time / 180) * (1 - timeline.clamp((fall - .65) / .35)));
-            node.style.filter = `brightness(${1 - .5 * fall})`;
+            style(node, 'transform', `perspective(700px) ${rotation}`);
+            style(node, 'opacity', String(timeline.clamp(time / 180) * (1 - timeline.clamp((fall - .65) / .35))));
+            style(node, 'filter', `brightness(${1 - .5 * fall})`);
           }
+          if (time >= timeline.final.hit + 570) dispose();
         }
       };
     }

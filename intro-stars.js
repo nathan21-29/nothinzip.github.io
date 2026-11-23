@@ -14,8 +14,8 @@
     const atlas = document.createElement('canvas');
     const sprite = atlas.getContext('2d');
     const end = T.final.hit + 2500;
-    // An unavailable canvas should omit decoration, never interrupt the intro.
-    if (!context || !sprite) return { draw() {}, dispose() {}, end };
+    // An unavailable canvas lets the owner immediately restore the usable menu.
+    if (!context || !sprite) return { context: null, dispose() { canvas.width = canvas.height = atlas.width = atlas.height = 0; }, end };
 
     // Fivefold symmetry means a 72-degree atlas covers every orientation.
     // Rasterize the paths once, rather than rotating/repainting SVG polygons each frame.
@@ -47,7 +47,6 @@
     let started = false;
     let finished = false;
     let flashFinished = false;
-    let visible = false;
 
     function configure() {
       // Cap both DPR and total pixels: a 4K/retina screen must not multiply the work.
@@ -86,6 +85,12 @@
     }
     configure();
 
+    function beginFrame() {
+      context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
+      context.clearRect(0, 0, width, height);
+      context.fillStyle = '#fff';
+    }
+
     function draw(time) {
       if (finished) return;
       const hitAge = time - T.final.hit;
@@ -106,15 +111,12 @@
         started = true;
       }
       if (time >= end) { dispose(); return; }
-      // Clear only when there was something to erase; do no work before the final hit.
-      if (visible) context.clearRect(0, 0, width, height);
-      visible = false;
+      // The owner clears once for both gameplay and stars before drawing either.
       if (!flashFinished) {
         const opacity = .22 * T.clamp(hitAge / 45) * (1 - T.ease((hitAge - 45) / 420));
         if (opacity > 0) {
           context.globalAlpha = opacity;
           context.fillRect(0, 0, width, height);
-          visible = true;
         }
         if (hitAge >= 465) flashFinished = true;
       }
@@ -137,7 +139,6 @@
         const extent = size * tile / 22;
         context.globalAlpha = opacity;
         context.drawImage(atlas, frame * tile, 0, tile, tile, x - extent / 2, y - extent / 2, extent, extent);
-        visible = true;
       }
     }
 
@@ -149,7 +150,7 @@
       canvas.width = canvas.height = atlas.width = atlas.height = 0;
       stars.length = 0;
     }
-    return { draw, dispose, end };
+    return { context, beginFrame, draw, dispose, end };
   }
   window.IntroStars = { create };
 })();

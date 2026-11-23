@@ -8,6 +8,8 @@ const bootSource = readFileSync(new URL('../intro-boot.js', import.meta.url), 'u
 const runtimeSource = readFileSync(new URL('../intro.js', import.meta.url), 'utf8');
 const hudSource = readFileSync(new URL('../intro-hud.js', import.meta.url), 'utf8');
 const starsSource = readFileSync(new URL('../intro-stars.js', import.meta.url), 'utf8');
+const gameplaySource = readFileSync(new URL('../intro-gameplay.js', import.meta.url), 'utf8');
+const performanceSource = readFileSync(new URL('../intro-performance.js', import.meta.url), 'utf8');
 
 function timelineFixture() {
   const window = {};
@@ -109,7 +111,7 @@ function inputEvent(key, extra = {}) {
 
 function runtimeFixture({
   width = 1440, height = 900, reduced = false, systemReduced = false, failSvg = false, offscreen = false,
-  failCanvas = false, dpr = 1, cores = 8, memory = 8
+  failCanvas = false, dpr = 1, cores = 8, memory = 8, benchmark = false
 } = {}) {
   const listeners = new Map();
   const frames = new Map();
@@ -126,6 +128,14 @@ function runtimeFixture({
     beginPath() { this.operations.push(['beginPath']); }
     moveTo(...args) { this.operations.push(['moveTo', ...args]); }
     lineTo(...args) { this.operations.push(['lineTo', ...args]); }
+    bezierCurveTo(...args) { this.operations.push(['bezierCurveTo', ...args]); }
+    arc(...args) { this.operations.push(['arc', ...args]); }
+    stroke() { this.operations.push(['stroke']); }
+    setLineDash(...args) { this.operations.push(['setLineDash', ...args]); }
+    save() { (this.stack ??= []).push(this.globalAlpha); this.operations.push(['save']); }
+    restore() { this.globalAlpha = this.stack.pop(); this.operations.push(['restore']); }
+    translate(...args) { this.operations.push(['translate', ...args]); }
+    scale(...args) { this.operations.push(['scale', ...args]); }
     closePath() { this.operations.push(['closePath']); }
     fill() { this.operations.push(['fill']); }
     fillRect(...args) { this.fills.push({ args, opacity: this.globalAlpha }); }
@@ -175,9 +185,9 @@ function runtimeFixture({
   const motionListeners = new Set();
   const motionQuery = { matches: systemReduced, addEventListener(_type, fn) { motionListeners.add(fn); }, removeEventListener(_type, fn) { motionListeners.delete(fn); } };
   class MutationObserverStub { constructor(fn) { this.fn = fn; } observe() {} disconnect() { this.disconnected = true; } }
-  class ImageStub {}
+  class ImageStub { complete = true; naturalWidth = 256; }
   const intro = {
-    active: true, reduced, reviewTime: null, cleanups: [],
+    active: true, reduced, benchmark, reviewTime: null, cleanups: [],
     onFinish(fn) { this.cleanups.push(fn); },
     finish() {
       if (!this.active) return;
@@ -201,16 +211,20 @@ function runtimeFixture({
     getComputedStyle: () => ({ fontSize: '16px' }),
     requestAnimationFrame(fn) { const id = nextFrame++; frames.set(id, fn); return id; },
     cancelAnimationFrame(id) { frames.delete(id); },
-    console: { warn(...args) { warnings.push(args); } }
+    console: { warn(...args) { warnings.push(args); }, info() {} }
   };
   vm.runInNewContext(hudSource, context);
   vm.runInNewContext(starsSource, context);
+  vm.runInNewContext(gameplaySource, context);
+  vm.runInNewContext(performanceSource, context);
   vm.runInNewContext(runtimeSource, context);
   return {
     intro, frames, listeners, motionListeners, warnings, values, writes, attributeWrites, style, root, body, document,
+    performance: window.IntroPerformance,
     field: created.find(node => node.className === 'intro-playfield'), inertElements,
     canvas: created.find(node => node.className === 'intro-star-burst'),
-    atlas: created.find(node => node.tagName === 'canvas' && !node.className)
+    atlas: created.find(node => node.tagName === 'canvas' && !node.className),
+    canvases: created.filter(node => node.tagName === 'canvas')
   };
 }
 
@@ -229,7 +243,7 @@ function burstFrame(fixture, timestamp) {
   fixture.canvas.context.images.length = 0;
   fixture.canvas.context.fills.length = 0;
   runFrame(fixture, timestamp);
-  return fixture.canvas.context.images.map(image => ({
+  return fixture.canvas.context.images.filter(image => image.source === fixture.atlas).map(image => ({
     ...image, x: image.x + image.width / 2, y: image.y + image.height / 2
   }));
 }
@@ -356,14 +370,13 @@ test('Modest hardware and slow frame cadence use fewer stars without narrowing t
   }
 });
 
-test('Star frames reuse cached sprites without DOM writes or fresh paths', () => {
+test('Star tail reuses cached sprites without DOM writes or fresh paths', () => {
   const fixture = runtimeFixture();
   const paint = fixture.canvas.context;
   const atlasOperations = fixture.atlas.context.operations.length;
   runFrame(fixture, 0);
   runFrame(fixture, 2600);
-  assert.equal(paint.operations.length, 1, 'only the initial canvas transform is needed before the hit');
-  assert.equal(paint.images.length, 0);
+  assert.ok(paint.images.some(image => image.source.src?.includes('whitecat/')), 'gameplay uses the same canvas before the burst');
   burstFrame(fixture, 3860); // interactive menu; only the star tail remains
   const writes = fixture.attributeWrites.length;
   const operations = paint.operations.length;
@@ -371,7 +384,7 @@ test('Star frames reuse cached sprites without DOM writes or fresh paths', () =>
   assert.ok(stars.length > 0);
   assert.equal(fixture.attributeWrites.length, writes);
   assert.equal(fixture.atlas.context.operations.length, atlasOperations);
-  assert.deepEqual(paint.operations.slice(operations).map(op => op[0]), ['clearRect']);
+  assert.deepEqual(paint.operations.slice(operations).map(op => op[0]), ['setTransform', 'clearRect']);
   assert.equal(descendants(fixture.field).filter(node => node.tagName === 'polygon').length, 0);
   // Hidden tabs promptly release the tail and both backing stores.
   fixture.document.hidden = true;
@@ -382,14 +395,12 @@ test('Star frames reuse cached sprites without DOM writes or fresh paths', () =>
   assert.equal(fixture.frames.size, 0);
 });
 
-test('Unavailable canvas omits the burst and completes the intro normally', () => {
+test('Unavailable canvas immediately restores the usable menu', () => {
   const fixture = runtimeFixture({ failCanvas: true });
-  runFrame(fixture, 0);
-  runFrame(fixture, 3860);
   assert.equal(fixture.intro.active, false);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
-  runFrame(fixture, 5320);
   assert.equal(fixture.field.removed, true);
+  assert.equal(fixture.frames.size, 0);
   assert.deepEqual(fixture.warnings, []);
 });
 
@@ -509,7 +520,7 @@ test('Intro uses AR 9.2 timing and larger skin circles', () => {
   const runtime = runtimeFixture();
   const sprites = runtime.field;
   assert.ok(sprites);
-  assert.match(runtimeSource, /assets\/whitecat\/hitcircle@2x.png/);
+  assert.match(gameplaySource, /image\('hitcircle@2x'\)/);
   runtime.intro.finish();
 });
 
@@ -573,4 +584,103 @@ test('Watchdog finishes playback after the recovery deadline', () => {
   timer.fn();
   assert.equal(fixture.intro.active, false);
   assert.equal(fixture.timers.has(id), false);
+});
+
+test('Gameplay caps render work at 75 fps on a 240 Hz display without changing duration', () => {
+  const fixture = runtimeFixture();
+  const paint = fixture.canvas.context;
+  const clears = () => paint.operations.filter(op => op[0] === 'clearRect').length;
+  const before = clears();
+  for (let frame = 0; frame <= 240; frame++) runFrame(fixture, frame * 1000 / 240);
+  assert.ok(clears() - before >= 75 && clears() - before <= 76);
+  const operations = paint.operations.length;
+  const writes = fixture.writes.length;
+  runFrame(fixture, 1001);
+  assert.equal(paint.operations.length, operations, 'intermediate refreshes do not render');
+  assert.equal(fixture.writes.length, writes, 'intermediate refreshes do not update the logo');
+  runFrame(fixture, 3860);
+  assert.equal(fixture.intro.active, false, 'the last pose and release meet the elapsed-time deadline');
+  assert.equal(descendants(fixture.field).filter(node => node.tagName === 'canvas').length, 1);
+  assert.equal(descendants(fixture.field).some(node => node.tagName === 'g'), false);
+  const tailStart = clears();
+  for (let frame = 1; frame <= 240; frame++) runFrame(fixture, 3860 + frame * 1000 / 240);
+  assert.equal(clears() - tailStart, 50, 'star tail paints at 50 fps');
+  runFrame(fixture, 5320);
+  assert.equal(fixture.frames.size, 0);
+  assert.ok(fixture.canvases.every(canvas => canvas.width === 0 && canvas.height === 0), 'all backing stores are released');
+  assert.deepEqual(fixture.warnings, []);
+});
+
+test('Gameplay rasterizes the slider once and skips completed hit objects', () => {
+  const fixture = runtimeFixture();
+  const paint = fixture.canvas.context;
+  const slider = fixture.canvases.find(canvas => canvas !== fixture.canvas && canvas !== fixture.atlas);
+  const operations = slider.context.operations.length;
+  runFrame(fixture, 0);
+  burstFrame(fixture, 400);
+  assert.ok(paint.images.some(image => image.source.src?.endsWith('default-1@2x.png')));
+  burstFrame(fixture, 1900);
+  assert.ok(paint.images.some(image => image.source === slider), 'slider uses the cached raster');
+  assert.equal(slider.context.operations.length, operations);
+  assert.ok(!paint.images.some(image => /default-[123]@2x/.test(image.source.src)), 'expired circles are not drawn');
+  burstFrame(fixture, 3200);
+  assert.ok(paint.images.every(image => image.source === fixture.atlas), 'only stars remain after gameplay disappears');
+  fixture.intro.finish();
+});
+
+test('Stable gameplay does not rewrite logo styles or unchanged HUD values', () => {
+  const fixture = runtimeFixture();
+  runFrame(fixture, 0);
+  runFrame(fixture, 200);
+  const writes = fixture.writes.length;
+  const nodes = descendants(fixture.field);
+  const hudKeys = nodes.filter(node => node.className === 'intro-hud-key');
+  const attributes = fixture.attributeWrites.filter(([node]) => hudKeys.includes(node)).length;
+  runFrame(fixture, 300);
+  assert.equal(fixture.writes.length, writes);
+  assert.equal(fixture.attributeWrites.filter(([node]) => hudKeys.includes(node)).length, attributes);
+  fixture.intro.finish();
+});
+
+test('Benchmarks report average fps and slowest-one-percent frame times accurately', () => {
+  const fixture = runtimeFixture();
+  const summarize = fixture.performance.summarize;
+  const steady = summarize(Array(300).fill(1000 / 60));
+  assert.ok(Math.abs(steady.averageFps - 60) < 1e-9);
+  assert.ok(Math.abs(steady.low1PercentFps - 60) < 1e-9);
+  const stalled = summarize([...Array(198).fill(10), 40, 60]);
+  assert.equal(stalled.averageFps, 200000 / 2080);
+  assert.equal(stalled.low1PercentFps, 20);
+  assert.equal(summarize([]).averageFps, null);
+  assert.equal(summarize([]).low1PercentFps, null);
+  assert.equal(summarize([25]).low1PercentFps, 40);
+  fixture.intro.finish();
+  assert.equal(fixture.performance.lastResult, undefined, 'normal playback does not collect metrics');
+});
+
+test('Local benchmarks measure painted frames in both phases and label interrupted runs', () => {
+  const fixture = runtimeFixture({ benchmark: true });
+  for (let frame = 0; frame <= 550; frame++) {
+    if (!fixture.frames.size) break;
+    runFrame(fixture, frame * 10);
+  }
+  const result = fixture.performance.lastResult;
+  assert.equal(result.status, 'completed');
+  assert.ok(result.phases.gameplay.averageFps > 74 && result.phases.gameplay.averageFps < 76);
+  assert.equal(result.phases.gameplay.low1PercentFps, 50, 'skipped display refreshes remain in the measurements');
+  assert.ok(result.phases.stars.averageFps > 49 && result.phases.stars.averageFps < 51);
+  assert.equal(result.phases.stars.low1PercentFps, 50);
+  const skipped = runtimeFixture({ benchmark: true });
+  runFrame(skipped, 0);
+  runFrame(skipped, 40);
+  skipped.intro.finish();
+  assert.equal(skipped.performance.lastResult.status, 'interrupted');
+  assert.equal(skipped.performance.lastResult.phases.gameplay.averageFps, 25);
+});
+
+test('Benchmarking requires an explicit local replay without a static review time', () => {
+  assert.equal(bootFixture({ search: '?intro=replay&introPerf=1' }).intro.benchmark, false);
+  assert.equal(bootFixture({ hostname: 'localhost', search: '?introPerf=1' }).intro.benchmark, false);
+  assert.equal(bootFixture({ hostname: 'localhost', search: '?intro=replay&introPerf=1' }).intro.benchmark, true);
+  assert.equal(bootFixture({ hostname: 'localhost', search: '?intro=replay&introPerf=1&introAt=1820' }).intro.benchmark, false);
 });

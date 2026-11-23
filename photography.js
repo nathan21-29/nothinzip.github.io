@@ -25,6 +25,22 @@
   let count = 0;
   let filterAnimation;
   let filtering = false;
+  let nativeScrolling = false;
+  let touchSettleTimer = 0;
+
+  function resetTouchScroll() {
+    clearTimeout(touchSettleTimer);
+    nativeScrolling = touching = false;
+  }
+
+  function settleTouchScroll() {
+    clearTimeout(touchSettleTimer);
+    if (touching) return;
+    touchSettleTimer = setTimeout(() => {
+      nativeScrolling = false;
+      if (active) wrapScroll();
+    }, 160);
+  }
 
   const point = location => ({ x: 20 + (location.longitude - 128) * 33, y: 20 + (46 - location.latitude) * 40 });
   function shuffled(list) {
@@ -83,15 +99,16 @@
     // Accumulate fractions independently: native scrollTop may round subpixel steps.
     if (Math.abs(stream.scrollTop - appliedPosition) > 1) position = stream.scrollTop;
     position += dt * 24;
-    if (position >= cycleHeight) position %= cycleHeight;
     stream.scrollTop = position;
     appliedPosition = stream.scrollTop;
+    wrapScroll();
     frame = requestAnimationFrame(tick);
   }
 
   function sizeLoop() {
     const first = roll.firstElementChild;
     if (!first) return;
+    const previousHeight = cycleHeight;
     cycleHeight = count > 1 ? first.getBoundingClientRect().height : 0;
     const copies = cycleHeight ? Math.min(6, Math.max(3, Math.ceil(stream.clientHeight / cycleHeight) + 2)) : 1;
     while (roll.children.length > copies) roll.lastElementChild.remove();
@@ -102,8 +119,9 @@
       // Repeated cards still open by pointer, but are omitted from keyboard navigation.
       roll.append(copy);
     }
-    if (cycleHeight && stream.scrollTop < cycleHeight) stream.scrollTop += cycleHeight;
-    position = appliedPosition = stream.scrollTop;
+    // Image loads must not relocate the viewport during native scrolling.
+    if (!previousHeight && cycleHeight) stream.scrollTop += cycleHeight;
+    if (previousHeight !== cycleHeight) position = appliedPosition = stream.scrollTop;
     syncPlayback();
   }
 
@@ -111,7 +129,7 @@
     const location = locations.find(location => location.id === photo.city);
     const description = [location?.name, photo.camera].filter(Boolean).join(' • ');
     const caption = [photo.caption, description].filter(Boolean).join(' · ');
-    return `<figure class="photo-card"><button class="photo-image-button" data-image="${escape(photo.src)}" data-image-alt="${escape(photo.alt)}" data-image-caption="${escape(caption)}" aria-label="Enlarge ${escape(photo.caption || location?.name + ' photograph')}"><img src="${escape(photo.preview || photo.src)}" alt="${escape(photo.alt)}" decoding="async" loading="${index < 2 ? 'eager' : 'lazy'}"><span class="photo-enlarge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg></span></button><figcaption><span>${escape(photo.caption || description)}</span>${photo.caption ? `<small>${escape(description)}</small>` : ''}</figcaption></figure>`;
+    return `<figure class="photo-card"><button class="photo-image-button" data-image="${escape(photo.src)}" data-image-alt="${escape(photo.alt)}" data-image-caption="${escape(caption)}" aria-label="Enlarge ${escape(photo.caption || location?.name + ' photograph')}"><img src="${escape(photo.preview || photo.src)}" alt="${escape(photo.alt)}"${photo.width && photo.height ? ` width="${photo.width}" height="${photo.height}"` : ''} decoding="async" loading="${index < 2 ? 'eager' : 'lazy'}"><span class="photo-enlarge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg></span></button><figcaption><span>${escape(photo.caption || description)}</span>${photo.caption ? `<small>${escape(description)}</small>` : ''}</figcaption></figure>`;
   }
 
   function updateSelection() {
@@ -131,6 +149,7 @@
   async function select(city = null, animate = true) {
     if (city && !locations.some(location => location.id === city)) return;
     selected = city;
+    resetTouchScroll();
     updateSelection();
     stopMomentum();
     cancelAnimationFrame(wheelFrame); wheelFrame = 0;
@@ -187,7 +206,7 @@
     } else stopMomentum();
   }
   function wrapScroll() {
-    if (!cycleHeight || filtering) return;
+    if (!cycleHeight || filtering || nativeScrolling) return;
     let shift = 0;
     if (stream.scrollTop < cycleHeight * .5) shift = cycleHeight;
     else if (stream.scrollTop > cycleHeight * 1.5) shift = -cycleHeight;
@@ -197,7 +216,12 @@
       position = appliedPosition = stream.scrollTop;
     }
   }
-  stream.addEventListener('scroll', wrapScroll, { passive: true });
+  stream.addEventListener('scroll', () => {
+    // Recentring scrollTop during iPad momentum interrupts native scrolling and
+    // can flash unpainted tiles. Wait until the gesture and inertia have ended.
+    if (nativeScrolling) settleTouchScroll();
+    else wrapScroll();
+  }, { passive: true });
   stream.addEventListener('dragstart', event => event.preventDefault());
   stream.addEventListener('pointerdown', event => {
     if (event.pointerType === 'touch' || event.button !== 0) return;
@@ -263,8 +287,13 @@
   pause.addEventListener('click', () => { playing = !playing; syncPlayback(); });
   stream.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') { hovered = true; syncPlayback(); } });
   stream.addEventListener('pointerleave', () => { hovered = false; syncPlayback(); });
-  stream.addEventListener('touchstart', () => { touching = true; playing = false; syncPlayback(); }, { passive: true });
-  const endTouch = () => { touching = false; syncPlayback(); };
+  stream.addEventListener('touchstart', () => {
+    clearTimeout(touchSettleTimer);
+    nativeScrolling = touching = true;
+    playing = false;
+    syncPlayback();
+  }, { passive: true });
+  const endTouch = () => { touching = false; settleTouchScroll(); syncPlayback(); };
   stream.addEventListener('touchend', endTouch, { passive: true });
   stream.addEventListener('touchcancel', endTouch, { passive: true });
   stream.addEventListener('focusin', syncPlayback);
@@ -279,7 +308,16 @@
     else wheelTarget = Math.max(0, Math.min(stream.scrollHeight - stream.clientHeight, wheelTarget));
     if (!wheelFrame) wheelFrame = requestAnimationFrame(smoothWheel);
   }, { passive: false });
-  roll.addEventListener('load', sizeLoop, true);
+  roll.addEventListener('load', event => {
+    // A wrap can bring a distant copy onscreen in one step. Once a preview is
+    // cached, ready its matching copies instead of waiting for lazy loading
+    // after the jump. Unseen photos still load lazily.
+    const source = event.target.getAttribute('src');
+    if (source) roll.querySelectorAll('img').forEach(image => {
+      if (image.getAttribute('src') === source && image.getAttribute('loading') !== 'eager') image.setAttribute('loading', 'eager');
+    });
+    sizeLoop();
+  }, true);
   roll.addEventListener('error', event => { event.target.closest('.photo-image-button')?.classList.add('image-unavailable'); }, true);
   document.addEventListener('visibilitychange', syncPlayback);
   document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('close', syncPlayback));
@@ -292,6 +330,7 @@
   window.PhotoGallery = {
     setActive(value) {
       active = value;
+      resetTouchScroll();
       stopMomentum();
       cancelAnimationFrame(wheelFrame); wheelFrame = 0; drag = null;
       if (!active) { ++renderId; filterAnimation?.cancel(); stream.removeAttribute('aria-busy'); }

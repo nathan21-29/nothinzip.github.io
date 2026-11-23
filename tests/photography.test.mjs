@@ -10,7 +10,7 @@ const locations = [
   { id: 'nara', name: 'Nara', latitude: 35, longitude: 136, label: [335, 568] }
 ];
 const photos = Object.freeze([
-  { city: 'kyoto', src: '/kyoto/garden.jpg', preview: '/previews/garden.webp', alt: 'Temple garden', caption: 'Temple' },
+  { city: 'kyoto', src: '/kyoto/garden.jpg', preview: '/previews/garden.webp', width: 1600, height: 1067, alt: 'Temple garden', caption: 'Temple' },
   { city: 'ine', src: '/ine/boats.jpg', preview: '/previews/boats.webp', alt: 'Boats & "houses"', caption: 'Boathouses' },
   { city: 'kyoto', src: '/kyoto/river.jpg', alt: 'River at dusk', caption: 'River' }
 ].map(Object.freeze));
@@ -138,6 +138,8 @@ function fixture() {
   window.PHOTOGRAPHY_LOCATIONS = locations;
   window.PHOTOGRAPHY_PHOTOS = photos;
   const frames = new Map();
+  const timers = new Map();
+  let nextTimer = 1;
   let nextFrame = 1;
   const pendingResizes = new Map();
   const dialogObservers = [];
@@ -158,6 +160,8 @@ function fixture() {
   };
   vm.runInNewContext(source, {
     window, document, queueMicrotask,
+    setTimeout(callback) { const id = nextTimer++; timers.set(id, callback); return id; },
+    clearTimeout(id) { timers.delete(id); },
     Math: Object.assign(Object.create(Math), { random: () => 0 }),
     requestAnimationFrame(callback) {
       const id = nextFrame++;
@@ -178,6 +182,11 @@ function fixture() {
 
   return {
     gallery: window.PhotoGallery, window, document, stream, roll, animations, frames, byId,
+    flushTimers() {
+      const pending = [...timers.values()];
+      timers.clear();
+      pending.forEach(callback => callback());
+    },
     runFrame(time) {
       const pending = [...frames];
       frames.clear();
@@ -219,6 +228,10 @@ test('Opening the gallery shuffles the original collection and preserves card me
     const preview = card.querySelector('img');
     assert.equal(preview.getAttribute('src'), photo.preview || photo.src);
     assert.equal(preview.getAttribute('alt'), photo.alt);
+    if (photo.width) {
+      assert.equal(preview.getAttribute('width'), String(photo.width));
+      assert.equal(preview.getAttribute('height'), String(photo.height));
+    }
     assert.equal(card.dataset.imageAlt, photo.alt);
     assert.ok(card.dataset.imageCaption.includes(photo.caption));
     assert.ok(card.dataset.imageCaption.includes(city.name));
@@ -259,7 +272,7 @@ test('Playback advances, pauses on motion or visibility changes, and resumes aft
   view.gallery.setActive(true);
   assert.equal(view.frames.size, 1);
   for (const time of [100, 116, 132, 148]) view.runFrame(time);
-  assert.equal(view.stream.scrollTop, 1, 'fractional motion accumulates on an integer scroll position');
+  assert.equal(view.stream.scrollTop, 601, 'fractional motion accumulates in the middle copy');
 
   pause.click();
   assert.equal(view.frames.size, 0);
@@ -314,9 +327,9 @@ test('Autoplay loops across duplicate cards while keeping one keyboard stop per 
   }
 
   view.runFrame(100);
-  view.stream.scrollTop = view.roll.firstElementChild.getBoundingClientRect().height - 1;
+  view.stream.scrollTop = view.roll.firstElementChild.getBoundingClientRect().height * 2 - 1;
   view.runFrame(150);
-  assert.equal(view.stream.scrollTop, 0);
+  assert.equal(view.stream.scrollTop, 600);
   assert.equal(view.frames.size, 1);
 });
 
@@ -401,6 +414,46 @@ function flick(view, distance = 10, releaseTime = 110, type = 'pointerup') {
   view.stream.emit('pointermove', { pointerId: 1, clientY: 200 - distance, timeStamp: 110, preventDefault() {} });
   view.stream.emit(type, { type, pointerId: 1, timeStamp: releaseTime });
 }
+
+test('Lazy image loads and resize notifications do not recenter an already sized stream', () => {
+  const view = fixture();
+  view.gallery.setActive(true);
+  view.stream.scrollTop = 400;
+  for (const image of view.roll.querySelectorAll('img')) {
+    view.roll.emit('load', { target: image });
+    assert.equal(view.stream.scrollTop, 400, 'loading a copy must not jump to another cycle');
+  }
+  view.flushResize();
+  assert.equal(view.stream.scrollTop, 400);
+});
+
+test('Touch gestures and native inertia finish before infinite scrolling recenters', () => {
+  const view = fixture();
+  view.gallery.setActive(true);
+  view.stream.emit('touchstart');
+  view.stream.scrollTop = 200;
+  view.stream.emit('scroll');
+  view.flushTimers();
+  assert.equal(view.stream.scrollTop, 200, 'never recenter under the finger');
+  view.stream.emit('touchend');
+  view.stream.scrollTop = 150;
+  view.stream.emit('scroll');
+  assert.equal(view.stream.scrollTop, 150, 'inertia keeps ownership of scrollTop');
+  view.flushTimers();
+  assert.equal(view.stream.scrollTop, 750, 'recenter once scrolling settles');
+  assert.equal(view.frames.size, 0, 'touch scrolling leaves autoplay paused');
+});
+
+test('Loaded previews ready their loop copies without eagerly fetching unseen photos', () => {
+  const view = fixture();
+  view.gallery.setActive(true);
+  const images = view.roll.querySelectorAll('img');
+  const lazy = images.find(image => image.getAttribute('loading') === 'lazy');
+  const source = lazy.getAttribute('src');
+  view.roll.emit('load', { target: lazy });
+  assert.ok(images.filter(image => image.getAttribute('src') === source).every(image => image.getAttribute('loading') === 'eager'));
+  assert.equal(view.stream.scrollTop, 600);
+});
 
 test('A released drag coasts in its direction and only loses speed, then stops scheduling frames', () => {
   for (const direction of [-1, 1]) {

@@ -17,6 +17,7 @@
   const intro = window.SiteIntro = {
     active,
     reduced: motionOff,
+    benchmark: replay && params.get('introPerf') === '1' && !params.has('introAt'),
     // A local-only still frame is useful for reviewing timing at narrow sizes.
     reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(5320, Number(params.get('introAt')) || 0)) : null,
     onFinish(cleanup) { cleanups.push(cleanup); },

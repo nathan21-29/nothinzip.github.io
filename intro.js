@@ -5,23 +5,41 @@
   if (!intro?.active) return;
   const root = document.documentElement;
   const T = window.IntroTimeline;
-  const svgNS = 'http://www.w3.org/2000/svg';
+  const benchmark = window.IntroPerformance?.create(intro);
   const restores = [];
   let frame = 0;
   let field;
   let starBurst;
+  let gameplay;
+  let hud;
+  let lastPaint;
+  const frameInterval = 1000 / 75;
+  const tailInterval = 1000 / 50;
   let burstTail = false;
   let motionObserver;
-  const set = (name, value) => root.style.setProperty(`--intro-${name}`, String(value));
-  const groups = [];
-  const radius = T.diameter / 2;
-  const trailInterval = 1000 / 30;
+  const properties = new Map();
+  const set = (name, value) => {
+    const text = String(value);
+    if (properties.get(name) === text) return;
+    properties.set(name, text);
+    root.style.setProperty('--intro-' + name, text);
+  };
+  // Advance the paint deadline without catching up missed frames or speeding playback up.
+  function shouldPaint(timestamp, interval) {
+    if (lastPaint !== undefined && timestamp - lastPaint < interval - .5) return false;
+    lastPaint = lastPaint === undefined ? timestamp
+      : lastPaint + Math.max(1, Math.floor((timestamp - lastPaint + .5) / interval)) * interval;
+    return true;
+  }
   let start;
 
-  function clearField() {
+  function clearField(status = 'interrupted') {
     cancelAnimationFrame(frame);
+    gameplay?.dispose();
+    hud?.dispose();
     starBurst?.dispose();
     field?.remove();
+    benchmark?.finish(status);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('hashchange', onHistoryChange);
     window.removeEventListener('popstate', onHistoryChange);
@@ -69,8 +87,7 @@
       const progress = T.ease(time);
       set('ui-visibility', 'visible');
       set('profile', progress);
-      set('footer', progress);
-      set('hint', progress);
+      if (reduced) { set('footer', progress); set('hint', progress); }
       set('background', progress);
       if (reduced) {
         set('profile-y', '0px'); set('footer-y', '0px');
@@ -83,6 +100,7 @@
         if (!intro.active) return;
         if (start === undefined) start = time;
         const p = T.clamp((time - start) / 180);
+        if (p < 1 && !shouldPaint(time, frameInterval)) { frame = requestAnimationFrame(fade); return; }
         reveal(p, true);
         set('logo-opacity', p); set('word', 1); set('word-scale', 1);
         set('facets', .7); set('depth', 1); set('fill', '#e66da6');
@@ -97,73 +115,14 @@
     field = document.createElement('div');
     field.className = 'intro-playfield';
     field.setAttribute('aria-hidden', 'true');
-    field.innerHTML = `<svg xmlns="${svgNS}" viewBox="0 0 ${innerWidth} ${innerHeight}"><g class="intro-composition" transform="translate(${center.x} ${center.y}) scale(${scale})"></g></svg><p class="intro-skip">Click or Enter to skip</p>`;
+    field.innerHTML = '<p class="intro-skip">Click or Enter to skip</p>';
     document.body.append(field);
-    const hud = window.IntroHUD.create(field, T, innerWidth, innerHeight);
-    const composition = field.querySelector('g');
-    const create = (tag, attributes, parent = composition) => {
-      const node = document.createElementNS(svgNS, tag);
-      for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
-      parent.append(node);
-      return node;
-    };
+    hud = window.IntroHUD.create(field, T, innerWidth, innerHeight);
+    const skip = field.querySelector('.intro-skip');
     starBurst = window.IntroStars.create(field, T, innerWidth, innerHeight);
+    if (!starBurst.context) { intro.finish(); return; }
     const burstEnd = starBurst.end;
-    const approach = parent => {
-      const group = create('g', {}, parent);
-      create('image', { href: 'assets/whitecat/approachcircle@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-approach-skin' }, group);
-      return group;
-    };
-    const addCircle = (point, parent = composition) => {
-      const group = create('g', { transform: `translate(${point.x} ${point.y})`, opacity: 0 }, parent);
-      const face = create('g', {}, group);
-      create('image', { href: 'assets/whitecat/hitcircle@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-skin-base' }, face);
-      create('image', { href: 'assets/whitecat/hitcircleoverlay@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-skin-overlay' }, face);
-      const numberSize = T.diameter * 100 / 256;
-      create('image', { href: `assets/whitecat/default-${point.number}@2x.png`, x: -numberSize / 2, y: -numberSize / 2, width: numberSize, height: numberSize }, face);
-      const ring = approach(group);
-      const ripple = create('circle', { r: radius, class: 'intro-ripple', opacity: 0 }, group);
-      const object = { point, group, face, ring, ripple };
-      groups.push(object);
-      return object;
-    };
-    // Slider body sits behind its head and all hit objects.
-    const sliderGroup = create('g', { opacity: 0 });
-    const [a, b, c, d] = T.slider.points;
-    const path = `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${d.x} ${d.y}`;
-    for (const className of ['intro-slider-border', 'intro-slider-track', 'intro-slider-guide']) create('path', { d: path, class: className }, sliderGroup);
-    const sliderHead = addCircle({ ...a, hit: T.slider.start, number: 4 });
-    const follow = create('g', { opacity: 0 });
-    create('circle', { r: radius * 1.35, class: 'intro-slider-follow' }, follow);
-    create('circle', { r: radius * .85, class: 'intro-slider-ball' }, follow);
-    T.circles.forEach(point => addCircle(point));
-    const tailRipple = create('circle', { cx: d.x, cy: d.y, r: radius, class: 'intro-ripple', opacity: 0 });
-    // The fifth circle itself is #main-cookie. Only its approach ring and ripple are SVG.
-    const finalRing = approach(composition);
-    const finalRipple = create('circle', { r: radius, class: 'intro-ripple', opacity: 0 });
-    const trail = create('g', {});
-    const cursor = create('g', {});
-    const cursorFallback = create('circle', { r: 10, class: 'intro-cursor-fallback' }, cursor);
-    const cursorSprite = create('image', { href: 'assets/whitecat/cursor-0.7x.png', x: -45, y: -45, width: 90, height: 90 }, cursor);
-    const cursorImage = new Image();
-    cursorImage.onload = () => { cursorFallback.setAttribute('opacity', 0); };
-    cursorImage.src = 'assets/whitecat/cursor-0.7x.png';
-    const trailSprites = Array.from({ length: Math.ceil(150 / trailInterval) }, () => create('image', {
-      href: 'assets/whitecat/cursortrail@2x.png', x: -22.4, y: -22.4, width: 44.8, height: 44.8, opacity: 0
-    }, trail));
-
-    function drawCircle(object, time) {
-      const { point, group, face, ring, ripple } = object;
-      const until = point.hit - time;
-      const age = time - point.hit;
-      group.setAttribute('opacity', until > T.approach || age > 260 ? 0 : T.clamp((T.approach - until) / T.fadeIn));
-      face.setAttribute('opacity', age < 0 ? 1 : 1 - T.clamp(age / 130));
-      face.setAttribute('transform', `scale(${age < 0 ? 1 : 1 + .13 * T.ease(age / 180)})`);
-      ring.setAttribute('opacity', until > 0 ? 1 : 0);
-      ring.setAttribute('transform', `scale(${1 + 1.15 * T.clamp(until / T.approach)})`);
-      ripple.setAttribute('opacity', age >= 0 ? .65 * (1 - T.clamp(age / 260)) : 0);
-      ripple.setAttribute('r', radius + 24 * T.ease(age / 260));
-    }
+    gameplay = window.IntroGameplay.create(starBurst.context, T, center, scale);
     function draw(time) {
       hud.draw(time);
       const morph = T.ease((time - T.final.hit) / 680);
@@ -180,56 +139,33 @@
       set('depth', morph); set('halo', T.ease((time - 3150) / 520));
       set('spectrum', T.ease((time - 3140) / 600));
       set('spectrum-scale', T.mix(.72, 1, T.ease((time - 3140) / 600)));
-      if (time >= 3100) root.dataset.intro = 'settling';
+      if (time >= 3100 && root.dataset.intro !== 'settling') root.dataset.intro = 'settling';
       const profile = T.clamp((time - 3100) / 650);
       const footer = T.clamp((time - 3180) / 650);
       reveal(profile);
+      starBurst.beginFrame();
       starBurst.draw(time);
+      gameplay.draw(time);
       set('footer', T.ease(footer)); set('hint', T.ease((time - 3480) / 360));
       // Fast ease-out with one small, damped settle, matching the menu transitions.
       const settle = progress => progress < .7 ? T.mix(-1, .018, T.ease(progress / .7)) : .018 * (1 - T.ease((progress - .7) / .3));
       set('profile-y', `${(rect.top + 150) * settle(profile)}px`);
       set('footer-y', `${-110 * settle(footer)}px`);
-      groups.forEach(object => drawCircle(object, time));
-      const sliderAge = time - T.slider.end;
-      sliderGroup.setAttribute('opacity', T.clamp((time - (T.slider.start - T.approach)) / T.fadeIn) * (1 - T.clamp(sliderAge / 200)));
-      const sliding = time >= T.slider.start && time <= T.slider.end;
-      const sliderPoint = T.sliderAt((time - T.slider.start) / (T.slider.end - T.slider.start));
-      follow.setAttribute('opacity', sliding ? 1 : 0);
-      follow.setAttribute('transform', `translate(${sliderPoint.x} ${sliderPoint.y})`);
-      if (sliding) sliderHead.face.setAttribute('opacity', 0);
-      tailRipple.setAttribute('opacity', sliderAge >= 0 ? .6 * (1 - T.clamp(sliderAge / 260)) : 0);
-      tailRipple.setAttribute('r', radius + 24 * T.ease(sliderAge / 260));
-      const untilFinal = T.final.hit - time;
-      finalRing.setAttribute('opacity', untilFinal > 0 ? T.clamp((T.approach - untilFinal) / T.fadeIn) : 0);
-      finalRing.setAttribute('transform', `scale(${1 + 1.15 * T.clamp(untilFinal / T.approach)})`);
-      finalRipple.setAttribute('opacity', time >= T.final.hit ? .6 * (1 - T.clamp((time - T.final.hit) / 300)) : 0);
-      finalRipple.setAttribute('r', radius + 28 * T.ease((time - T.final.hit) / 300));
-      const cursorOpacity = T.clamp((time - 100) / 180) * (1 - T.clamp((time - T.final.hit) / 180));
-      const point = T.cursorAt(time);
-      cursor.setAttribute('opacity', cursorOpacity);
-      const hitAge = time - Math.max(0, ...[...T.circles.map(item => item.hit), T.slider.start, T.final.hit].filter(hit => hit <= time));
-      const pressScale = 1 + .12 * (1 - T.clamp(hitAge / 140));
-      cursorSprite.setAttribute('transform', `scale(${pressScale})`);
-      cursor.setAttribute('transform', `translate(${point.x} ${point.y})`);
-      trailSprites.forEach((sprite, index) => {
-        // Reconstruct fixed 30 Hz samples from the master clock, even after a slow frame.
-        const sample = Math.floor(time / trailInterval) * trailInterval - index * trailInterval;
-        const position = T.cursorAt(sample);
-        sprite.setAttribute('transform', `translate(${position.x} ${position.y})`);
-        sprite.setAttribute('opacity', sample < 100 ? 0 : cursorOpacity * .55 * (1 - T.clamp((time - sample) / 150)));
-      });
-      field.querySelector('.intro-skip').style.opacity = String(.6 * (1 - T.clamp((time - 2800) / 250)));
+      skip.style.opacity = String(.6 * (1 - T.clamp((time - 2800) / 250)));
     }
     // Let the remaining confetti fall over the usable menu after the reveal completes.
     const tickBurstTail = timestamp => {
       try {
         const time = timestamp - start;
         if (time >= burstEnd || document.hidden || document.body.classList.contains('reduced-motion')) {
-          clearField();
+          clearField(time >= burstEnd ? 'completed' : 'interrupted');
           return;
         }
-        starBurst.draw(time);
+        if (shouldPaint(timestamp, tailInterval)) {
+          starBurst.beginFrame();
+          starBurst.draw(time);
+          benchmark?.paint('stars', timestamp);
+        }
         frame = requestAnimationFrame(tickBurstTail);
       } catch {
         clearField();
@@ -238,11 +174,22 @@
     const tick = timestamp => {
       if (!intro.active) return;
       try {
-        if (start === undefined) start = timestamp;
+        if (start === undefined) {
+          start = timestamp;
+          benchmark?.begin('gameplay', timestamp);
+        }
         const time = intro.reviewTime ?? Math.min(T.duration, timestamp - start);
-        draw(time);
+        if (intro.reviewTime !== null || time >= T.duration || shouldPaint(timestamp, frameInterval)) {
+          draw(time);
+          benchmark?.paint('gameplay', timestamp);
+        }
         if (time >= T.duration && intro.reviewTime === null) {
           burstTail = true;
+          gameplay.dispose();
+          hud.dispose();
+          skip.remove();
+          lastPaint = timestamp;
+          benchmark?.begin('stars', timestamp);
           intro.finish();
           frame = requestAnimationFrame(tickBurstTail);
         }

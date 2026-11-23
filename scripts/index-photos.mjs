@@ -6,6 +6,26 @@ const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const locations = ['hokkaido', 'gifu', 'ine', 'nagoya', 'osaka', 'tokyo', 'kyoto', 'nara'];
 const formats = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif']);
 
+// Previews are EXIF-oriented already. Reserve their display dimensions before
+// lazy images load, including in the copies used by the infinite stream.
+function webpDimensions(data) {
+  if (data.toString('ascii', 0, 4) !== 'RIFF' || data.toString('ascii', 8, 12) !== 'WEBP') return {};
+  for (let offset = 12; offset + 8 <= data.length;) {
+    const type = data.toString('ascii', offset, offset + 4);
+    const size = data.readUInt32LE(offset + 4);
+    const start = offset + 8;
+    if (start + size > data.length) return {};
+    if (type === 'VP8X' && size >= 10) return { width: data.readUIntLE(start + 4, 3) + 1, height: data.readUIntLE(start + 7, 3) + 1 };
+    if (type === 'VP8 ' && size >= 10) return { width: data.readUInt16LE(start + 6) & 0x3fff, height: data.readUInt16LE(start + 8) & 0x3fff };
+    if (type === 'VP8L' && size >= 5) {
+      const bits = data.readUInt32LE(start + 1);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+    }
+    offset = start + size + (size % 2);
+  }
+  return {};
+}
+
 async function scan(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(entries.filter(entry => !entry.name.startsWith('.')).map(async entry => {
@@ -69,6 +89,7 @@ export async function buildPhotoIndex(root = defaultRoot) {
       try {
         if ((await stat(previewPath)).isFile()) {
           photo.preview = relative(root, previewPath).split(sep).map(encodeURIComponent).join('/');
+          Object.assign(photo, webpDimensions(await readFile(previewPath)));
         }
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       photos.push(photo);

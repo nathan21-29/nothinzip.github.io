@@ -125,6 +125,25 @@ test('Malformed captions fail with a useful filename before replacing a working 
   }
 });
 
+test('Preview dimensions reserve the oriented aspect ratio before images load', async t => {
+  const { root, put } = await fixture(t);
+  await put('kyoto', 'portrait.jpg');
+  const preview = join(root, 'assets', 'photography-previews', 'kyoto', 'portrait.jpg.webp');
+  await mkdir(dirname(preview), { recursive: true });
+  // A VP8X canvas header, as used by previews with colour profiles.
+  const data = Buffer.alloc(30);
+  data.write('RIFF');
+  data.writeUInt32LE(22, 4);
+  data.write('WEBPVP8X', 8);
+  data.writeUInt32LE(10, 16);
+  data.writeUIntLE(1066, 24, 3);
+  data.writeUIntLE(1599, 27, 3);
+  await writeFile(preview, data);
+  const [photo] = await buildPhotoIndex(root);
+  assert.equal(photo.width, 1067);
+  assert.equal(photo.height, 1600);
+});
+
 test('Generated browser manifest updates after deletion and leaves unchanged files untouched', async t => {
   const { root, put } = await fixture(t);
   const image = await put('osaka', 'night.jpg');
