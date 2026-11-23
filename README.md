@@ -42,6 +42,8 @@ The first visit in each tab plays a silent 3.86-second osu!standard startup: thr
 
 For local review, open `http://127.0.0.1:4173/?intro=replay` to replay despite the session flag. Add `&introAt=1820` to hold a specific millisecond for up to the recovery deadline (4.8 seconds), or use `?intro=off` to bypass it. These switches only work on localhost or a directly opened file; production URLs cannot force a replay.
 
+The final star burst uses a separate canvas renderer in `intro-stars.js` on that same clock. It reuses a small rotation atlas, caps resolution at 1.5x and two million pixels, and culls offscreen stars. Devices reporting at most four cores or 4 GB memory, or averaging slower than 23 ms per frame during gameplay, use a lighter preset (72 desktop / 48 mobile stars, at most one million pixels). The full preset retains 120 / 72 stars; both keep the full fan and 500 ms declining emission. Cleanup releases the canvas and sprite backing stores, and browsers without a 2D canvas still complete the intro.
+
 - Click the circle or press **Enter** to open the main menu; repeat to enter Projects. **Esc** closes the menu.
 - Press **P** for projects, **A** for about, and **Esc** to go back.
 - Use the arrow keys to move through selections, **/** to search, and **F2** for a random project.

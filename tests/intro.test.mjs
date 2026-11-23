@@ -7,6 +7,7 @@ const timelineSource = readFileSync(new URL('../intro-timeline.js', import.meta.
 const bootSource = readFileSync(new URL('../intro-boot.js', import.meta.url), 'utf8');
 const runtimeSource = readFileSync(new URL('../intro.js', import.meta.url), 'utf8');
 const hudSource = readFileSync(new URL('../intro-hud.js', import.meta.url), 'utf8');
+const starsSource = readFileSync(new URL('../intro-stars.js', import.meta.url), 'utf8');
 
 function timelineFixture() {
   const window = {};
@@ -106,7 +107,10 @@ function inputEvent(key, extra = {}) {
   return { key, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; }, ...extra };
 }
 
-function runtimeFixture({ width = 1440, height = 900, reduced = false, systemReduced = false, failSvg = false, offscreen = false } = {}) {
+function runtimeFixture({
+  width = 1440, height = 900, reduced = false, systemReduced = false, failSvg = false, offscreen = false,
+  failCanvas = false, dpr = 1, cores = 8, memory = 8
+} = {}) {
   const listeners = new Map();
   const frames = new Map();
   const created = [];
@@ -114,6 +118,21 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, systemRed
   let nextFrame = 1;
   const values = new Map();
   const writes = [];
+  const attributeWrites = [];
+  class CanvasContext {
+    constructor() { this.operations = []; this.images = []; this.fills = []; this.globalAlpha = 1; }
+    setTransform(...args) { this.operations.push(['setTransform', ...args]); }
+    clearRect(...args) { this.operations.push(['clearRect', ...args]); }
+    beginPath() { this.operations.push(['beginPath']); }
+    moveTo(...args) { this.operations.push(['moveTo', ...args]); }
+    lineTo(...args) { this.operations.push(['lineTo', ...args]); }
+    closePath() { this.operations.push(['closePath']); }
+    fill() { this.operations.push(['fill']); }
+    fillRect(...args) { this.fills.push({ args, opacity: this.globalAlpha }); }
+    drawImage(source, sx, sy, sw, sh, x, y, width, height) {
+      this.images.push({ source, sx, sy, sw, sh, x, y, width, height, opacity: this.globalAlpha });
+    }
+  }
   const style = {
     setProperty(key, value) { values.set(key, value); writes.push([key, value]); },
     removeProperty(key) { values.delete(key); },
@@ -122,13 +141,15 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, systemRed
   };
   class Element {
     constructor(tag = 'div') { this.tagName = tag; this.attributes = new Map(); this.children = []; this.style = { setProperty(name, value) { this[name] = String(value); } }; this.inert = false; this.classList = { contains: name => this.classes?.has(name) ?? false }; }
-    setAttribute(key, value) { this.attributes.set(key, String(value)); }
+    setAttribute(key, value) { this.attributes.set(key, String(value)); attributeWrites.push([this, key, value]); }
     getAttribute(key) { return this.attributes.get(key); }
     append(child) { this.children.push(child); child.parent = this; }
+    prepend(child) { this.children.unshift(child); child.parent = this; }
     remove() { this.removed = true; if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
     blur() { this.blurred = true; }
     closest(selector) { return selector === '.cookie-anchor' ? anchor : null; }
     getBoundingClientRect() { return this.rect ?? { left: 620, top: 300, width: 200, height: 200 }; }
+    getContext() { return failCanvas ? null : (this.context ??= new CanvasContext()); }
     set innerHTML(value) { this.markup = value; }
     querySelector(selector) {
       if (selector === 'g') { const node = new Element('g'); this.append(node); return node; }
@@ -168,6 +189,7 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, systemRed
   const window = {
     SiteIntro: intro,
     IntroTimeline: timelineFixture(),
+    navigator: { hardwareConcurrency: cores, deviceMemory: memory }, devicePixelRatio: dpr,
     addEventListener(type, fn) { listeners.set(type, fn); },
     removeEventListener(type, fn) { if (listeners.get(type) === fn) listeners.delete(type); }
   };
@@ -182,8 +204,14 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, systemRed
     console: { warn(...args) { warnings.push(args); } }
   };
   vm.runInNewContext(hudSource, context);
+  vm.runInNewContext(starsSource, context);
   vm.runInNewContext(runtimeSource, context);
-  return { intro, frames, listeners, motionListeners, warnings, values, writes, style, root, body, field: created.find(node => node.className === 'intro-playfield'), inertElements };
+  return {
+    intro, frames, listeners, motionListeners, warnings, values, writes, attributeWrites, style, root, body, document,
+    field: created.find(node => node.className === 'intro-playfield'), inertElements,
+    canvas: created.find(node => node.className === 'intro-star-burst'),
+    atlas: created.find(node => node.tagName === 'canvas' && !node.className)
+  };
 }
 
 function runFrame(fixture, timestamp) {
@@ -195,6 +223,15 @@ function runFrame(fixture, timestamp) {
 
 function descendants(node) {
   return node.children.flatMap(child => [child, ...descendants(child)]);
+}
+
+function burstFrame(fixture, timestamp) {
+  fixture.canvas.context.images.length = 0;
+  fixture.canvas.context.fills.length = 0;
+  runFrame(fixture, timestamp);
+  return fixture.canvas.context.images.map(image => ({
+    ...image, x: image.x + image.width / 2, y: image.y + image.height / 2
+  }));
 }
 
 test('WhiteCat HUD tracks hits, slider hold, and topples backward on the final note', () => {
@@ -254,51 +291,106 @@ test('Background stays black through gameplay and fades in with the menu', () =>
 test('Final hit flashes softly and sends varied stars inward from both lower edges', () => {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     const fixture = runtimeFixture(viewport);
-    const nodes = descendants(fixture.field);
-    const stars = nodes.filter(node => node.getAttribute('class') === 'intro-burst-star');
-    const flash = nodes.find(node => node.getAttribute('class') === 'intro-hit-flash');
-    assert.equal(stars.length, viewport.width < 600 ? 72 : 120);
+    const starCount = viewport.width < 600 ? 72 : 120;
     runFrame(fixture, 0);
-    runFrame(fixture, 2819);
-    assert.ok(stars.every(star => star.getAttribute('opacity') === '0'));
-    assert.equal(flash.getAttribute('opacity'), '0');
-    runFrame(fixture, 2865);
-    assert.equal(Number(flash.getAttribute('opacity')), .22);
+    assert.equal(burstFrame(fixture, 2819).length, 0);
+    assert.equal(fixture.canvas.context.fills.length, 0);
+    burstFrame(fixture, 2865);
+    assert.equal(fixture.canvas.context.fills[0].opacity, .22);
     const emitted = [];
     for (const time of [2920, 3020, 3120, 3220]) {
-      runFrame(fixture, time);
-      emitted.push(stars.filter(star => Number(star.getAttribute('opacity')) > 0).length);
+      emitted.push(burstFrame(fixture, time).length);
     }
     const batches = emitted.map((count, index) => count - (emitted[index - 1] ?? 0));
-    assert.ok(batches[0] > batches[1] && batches[1] > batches[2] && batches[2] > batches[3], 'emission should taper over the first half second');
-    runFrame(fixture, 3300);
-    const positions = stars.map(star => star.getAttribute('transform').match(/translate\(([-\d.]+) ([-\d.]+)\)/).slice(1).map(Number));
-    assert.ok(stars.every(star => Number(star.getAttribute('opacity')) > 0));
-    assert.ok(new Set(stars.map(star => star.getAttribute('opacity'))).size > 10);
-    assert.ok(new Set(stars.map(star => star.getAttribute('transform').split('scale(')[1])).size > 10);
-    const left = positions.slice(0, stars.length / 2), right = positions.slice(stars.length / 2);
-    assert.ok(left.every(([x]) => x < viewport.width / 2));
-    assert.ok(right.every(([x]) => x > viewport.width / 2));
-    assert.ok(positions.every(([, y]) => y < viewport.height));
-    runFrame(fixture, 3830);
-    assert.ok(stars.some(star => Number(star.getAttribute('opacity')) > 0));
-    assert.equal(flash.getAttribute('opacity'), '0');
+    // Some small-screen stars are still outside the viewport immediately after launch.
+    assert.ok(emitted[1] > emitted[3] - emitted[1] && batches[1] > batches[2] && batches[2] > batches[3], 'visible emission should taper after the stars enter the viewport');
+    const stars = burstFrame(fixture, 3500);
+    assert.equal(stars.length, starCount);
+    assert.ok(new Set(stars.map(star => star.opacity)).size > 10);
+    assert.ok(new Set(stars.map(star => star.width)).size > 10);
+    const left = stars.slice(0, starCount / 2), right = stars.slice(starCount / 2);
+    assert.ok(left.every(star => star.x < viewport.width / 2));
+    assert.ok(right.every(star => star.x > viewport.width / 2));
+    assert.ok(stars.every(star => star.y < viewport.height));
+    assert.ok(burstFrame(fixture, 3830).length > 0);
+    assert.equal(fixture.canvas.context.fills.length, 0);
     runFrame(fixture, 3860);
     assert.equal(fixture.intro.active, false);
     assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
-    runFrame(fixture, 4300);
-    const fallingY = stars.map(star => Number(star.getAttribute('transform').match(/translate\([\d.-]+ ([\d.-]+)\)/)[1]));
-    runFrame(fixture, 4450);
-    const fallingX = stars.map(star => Number(star.getAttribute('transform').match(/translate\(([\d.-]+)/)[1]));
-    assert.ok(fallingX.some(x => x > 0 && x < viewport.width * .025), 'falling stars should reach the left edge');
-    assert.ok(fallingX.some(x => x < viewport.width && x > viewport.width * .975), 'falling stars should reach the right edge');
-    stars.forEach((star, index) => {
-      const y = Number(star.getAttribute('transform').match(/translate\([\d.-]+ ([\d.-]+)\)/)[1]);
-      assert.ok(y > fallingY[index], 'stars should fall downward under gravity');
-    });
+    const falling = burstFrame(fixture, 4300);
+    const fallen = burstFrame(fixture, 4450);
+    assert.ok(fallen.some(star => star.x > 0 && star.x < viewport.width * .025), 'falling stars should reach the left edge');
+    assert.ok(fallen.some(star => star.x < viewport.width && star.x > viewport.width * .975), 'falling stars should reach the right edge');
+    assert.ok(fallen.reduce((sum, star) => sum + star.y, 0) / fallen.length > falling.reduce((sum, star) => sum + star.y, 0) / falling.length, 'stars should fall downward under gravity');
     runFrame(fixture, 5320);
     assert.equal(fixture.field.removed, true);
+    assert.equal(fixture.canvas.width, 0);
+    assert.equal(fixture.atlas.width, 0);
   }
+});
+
+test('Star burst caps backing pixels on high-DPI and 4K screens', () => {
+  for (const viewport of [{ width: 390, height: 844, dpr: 3 }, { width: 3840, height: 2160, dpr: 2 }]) {
+    const fixture = runtimeFixture(viewport);
+    assert.ok(fixture.canvas.width <= viewport.width * 1.5);
+    assert.ok(fixture.canvas.height <= viewport.height * 1.5);
+    assert.ok(fixture.canvas.width * fixture.canvas.height <= 2000000);
+    fixture.intro.finish();
+  }
+});
+
+test('Modest hardware and slow frame cadence use fewer stars without narrowing the fan', () => {
+  for (const options of [{ cores: 4 }, { memory: 4 }, { slow: true }, { cores: 2, width: 390, height: 844 }]) {
+    const fixture = runtimeFixture({ ...options, dpr: 3 });
+    runFrame(fixture, 0);
+    if (options.slow) for (let time = 33; time < 2820; time += 33) runFrame(fixture, time);
+    const stars = burstFrame(fixture, 3500);
+    assert.equal(stars.length, options.width ? 48 : 72);
+    assert.ok(fixture.canvas.width * fixture.canvas.height <= 1000000);
+    const width = options.width ?? 1440;
+    assert.ok(stars.some(star => star.x < width * .025));
+    assert.ok(stars.some(star => star.x > width * .975));
+    assert.ok(stars.some(star => star.x > width * .1 && star.x < width * .4));
+    assert.ok(stars.some(star => star.x < width * .9 && star.x > width * .6));
+    fixture.intro.finish();
+  }
+});
+
+test('Star frames reuse cached sprites without DOM writes or fresh paths', () => {
+  const fixture = runtimeFixture();
+  const paint = fixture.canvas.context;
+  const atlasOperations = fixture.atlas.context.operations.length;
+  runFrame(fixture, 0);
+  runFrame(fixture, 2600);
+  assert.equal(paint.operations.length, 1, 'only the initial canvas transform is needed before the hit');
+  assert.equal(paint.images.length, 0);
+  burstFrame(fixture, 3860); // interactive menu; only the star tail remains
+  const writes = fixture.attributeWrites.length;
+  const operations = paint.operations.length;
+  const stars = burstFrame(fixture, 4050);
+  assert.ok(stars.length > 0);
+  assert.equal(fixture.attributeWrites.length, writes);
+  assert.equal(fixture.atlas.context.operations.length, atlasOperations);
+  assert.deepEqual(paint.operations.slice(operations).map(op => op[0]), ['clearRect']);
+  assert.equal(descendants(fixture.field).filter(node => node.tagName === 'polygon').length, 0);
+  // Hidden tabs promptly release the tail and both backing stores.
+  fixture.document.hidden = true;
+  runFrame(fixture, 4100);
+  assert.equal(fixture.field.removed, true);
+  assert.equal(fixture.canvas.width, 0);
+  assert.equal(fixture.atlas.width, 0);
+  assert.equal(fixture.frames.size, 0);
+});
+
+test('Unavailable canvas omits the burst and completes the intro normally', () => {
+  const fixture = runtimeFixture({ failCanvas: true });
+  runFrame(fixture, 0);
+  runFrame(fixture, 3860);
+  assert.equal(fixture.intro.active, false);
+  assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
+  runFrame(fixture, 5320);
+  assert.equal(fixture.field.removed, true);
+  assert.deepEqual(fixture.warnings, []);
 });
 
 test('Runtime renders through the final cookie morph and restores inert state', () => {

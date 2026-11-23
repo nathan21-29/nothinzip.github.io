@@ -9,6 +9,7 @@
   const restores = [];
   let frame = 0;
   let field;
+  let starBurst;
   let burstTail = false;
   let motionObserver;
   const set = (name, value) => root.style.setProperty(`--intro-${name}`, String(value));
@@ -18,6 +19,7 @@
 
   function clearField() {
     cancelAnimationFrame(frame);
+    starBurst?.dispose();
     field?.remove();
     window.removeEventListener('resize', onResize);
     window.removeEventListener('hashchange', onHistoryChange);
@@ -104,77 +106,8 @@
       parent.append(node);
       return node;
     };
-    // Undo the gameplay transform: bursts originate at the actual viewport edges.
-    const burst = create('g', {
-      class: 'intro-star-burst',
-      transform: `scale(${1 / scale}) translate(${-center.x} ${-center.y})`
-    });
-    const flash = create('rect', {
-      class: 'intro-hit-flash', x: 0, y: 0, width: innerWidth, height: innerHeight,
-      fill: '#fff', opacity: 0
-    }, burst);
-    const starPoints = Array.from({ length: 10 }, (_, index) => {
-      const angle = index * Math.PI / 5 - Math.PI / 2;
-      const r = index % 2 ? .44 : 1;
-      return `${Math.cos(angle) * r},${Math.sin(angle) * r}`;
-    }).join(' ');
-    const starsPerSide = innerWidth < 600 ? 24 : 40;
-    const edgeStarsPerSide = innerWidth < 600 ? 12 : 20;
-    const emissionDuration = 500;
-    const burstEnd = T.final.hit + 2500;
-    const stars = [];
-    // Fixed variations keep replay frames stable without a second animation loop.
-    const variation = (index, salt) => ((index * salt + 17) % 101) / 100;
-    for (const side of [-1, 1]) {
-      for (let index = 0; index < starsPerSide + edgeStarsPerSide; index++) {
-        const seed = index + (side === 1 ? 47 : 0);
-        const nearEdge = index >= starsPerSide;
-        const count = starsPerSide + edgeStarsPerSide;
-        // Invert a linearly declining emission rate: maximum at the hit, zero at 0.5s.
-        // Shuffle timing across launch angles so each part of the fan remains covered.
-        const emissionRank = (index * 17 + (side === 1 ? 11 : 0)) % count;
-        const delay = emissionDuration * (1 - Math.sqrt(1 - (emissionRank + .5) / count));
-        const fanPosition = ((nearEdge ? index - starsPerSide : index) + .5) / (nearEdge ? edgeStarsPerSide : starsPerSide);
-        stars.push({
-          node: create('polygon', { points: starPoints, class: 'intro-burst-star', opacity: 0 }, burst),
-          side,
-          inset: nearEdge ? 3 : -12,
-          delay,
-          lifetime: Math.min(1800 + variation(seed, 29) * 500, burstEnd - T.final.hit - delay),
-          y: innerHeight * (.74 + variation(seed, 43) * .24),
-          // Extra near-vertical launches fill the whole gap between the edge and inward fan.
-          travel: innerWidth * (nearEdge ? .002 + fanPosition * .24 : .22 + fanPosition * .26),
-          launchSpeed: innerHeight * (.8 + variation(seed, 53) * .5),
-          size: (3 + variation(seed, 19) ** 1.7 * 12) * Math.min(1, innerWidth / 700),
-          brightness: .2 + variation(seed, 71) * .8,
-          rotation: variation(seed, 31) * 360,
-          spin: (variation(seed, 67) - .5) * 220
-        });
-      }
-    }
-
-    function drawBurst(time) {
-      const hitAge = time - T.final.hit;
-      flash.setAttribute('opacity', .22 * T.clamp(hitAge / 45) * (1 - T.ease((hitAge - 45) / 420)));
-      for (const star of stars) {
-        const age = time - T.final.hit - star.delay;
-        if (age < 0 || age >= star.lifetime) {
-          if (star.visible) star.node.setAttribute('opacity', 0);
-          star.visible = false;
-          continue;
-        }
-        star.visible = true;
-        const p = T.clamp(age / star.lifetime);
-        const travel = 1 - (1 - p) ** 2;
-        const x = (star.side === -1 ? star.inset : innerWidth - star.inset) - star.side * star.travel * travel;
-        const seconds = Math.max(0, age) / 1000;
-        // Screen y increases downward: gravity slows the launch, then pulls stars back down.
-        const y = star.y - star.launchSpeed * seconds + .5 * innerHeight * 1.15 * seconds ** 2;
-        const opacity = star.brightness * T.clamp(age / 55) * (1 - T.clamp((p - .72) / .28));
-        star.node.setAttribute('opacity', opacity);
-        star.node.setAttribute('transform', `translate(${x} ${y}) rotate(${star.rotation + star.spin * p}) scale(${star.size * (1 - .35 * p)})`);
-      }
-    }
+    starBurst = window.IntroStars.create(field, T, innerWidth, innerHeight);
+    const burstEnd = starBurst.end;
     const approach = parent => {
       const group = create('g', {}, parent);
       create('image', { href: 'assets/whitecat/approachcircle@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-approach-skin' }, group);
@@ -250,7 +183,7 @@
       const profile = T.clamp((time - 3100) / 650);
       const footer = T.clamp((time - 3180) / 650);
       reveal(profile);
-      drawBurst(time);
+      starBurst.draw(time);
       set('footer', T.ease(footer)); set('hint', T.ease((time - 3480) / 360));
       // Fast ease-out with one small, damped settle, matching the menu transitions.
       const settle = progress => progress < .7 ? T.mix(-1, .018, T.ease(progress / .7)) : .018 * (1 - T.ease((progress - .7) / .3));
@@ -295,7 +228,7 @@
           clearField();
           return;
         }
-        drawBurst(time);
+        starBurst.draw(time);
         frame = requestAnimationFrame(tickBurstTail);
       } catch {
         clearField();

@@ -16,7 +16,7 @@ function check(name, test) { test(); count++; console.log(`PASS ${name}`); }
 
 check('Application JavaScript parses', () => new vm.Script(app));
 check('Startup and cursor JavaScript parse', () => {
-  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro.js', 'cursor.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
+  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro-stars.js', 'intro.js', 'cursor.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
 });
 const context = { window: {} };
 vm.createContext(context);
