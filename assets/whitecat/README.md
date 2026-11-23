@@ -1,8 +1,10 @@
-# WhiteCat cursor assets
+# WhiteCat gameplay assets
 
 Cursor artwork from **WhiteCat (1.0)** by **cyperdark**, supplied from Nathan's installed osu! skin.
 
 Skin: <https://osu.ppy.sh/community/forums/topics/986201?n=1>
+
+The intro HUD uses the installed skin's original `inputoverlay-background@2x.png` and `inputoverlay-key@2x.png`. Score and combo digits come from its `Assets/score` and `Assets/combo` folders, with the 10-pixel logical overlap specified in `skin.ini`. The key overlay is rotated clockwise as in osu!stable, and uses the skin's `InputOverlayText` colour. The song progress pie is drawn in SVG. Counters and simulated key presses follow the intro timeline. On the last hit, the score section hinges upward, the keys hinge rightward, and the combo hinges downward into their screen edges.
 
 - `cursor@2x.png` and `cursortrail@2x.png` are the original skin sprites.
 - `hitcircle@2x.png`, `approachcircle@2x.png`, and `hitcircleoverlay@2x.png` are the original skin sprites used for startup hit circles, including the fifth circle as it morphs into the menu logo. The scripted slider is an SVG curve so it scales cleanly with the playfield. Numbers use the original skin’s `default-1@2x.png` through `default-5@2x.png` sprites.

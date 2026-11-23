@@ -6,6 +6,7 @@ import vm from 'node:vm';
 const timelineSource = readFileSync(new URL('../intro-timeline.js', import.meta.url), 'utf8');
 const bootSource = readFileSync(new URL('../intro-boot.js', import.meta.url), 'utf8');
 const runtimeSource = readFileSync(new URL('../intro.js', import.meta.url), 'utf8');
+const hudSource = readFileSync(new URL('../intro-hud.js', import.meta.url), 'utf8');
 
 function timelineFixture() {
   const window = {};
@@ -120,7 +121,7 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, systemRed
     [Symbol.iterator]() { return values.keys(); }
   };
   class Element {
-    constructor(tag = 'div') { this.tagName = tag; this.attributes = new Map(); this.children = []; this.style = {}; this.inert = false; this.classList = { contains: name => this.classes?.has(name) ?? false }; }
+    constructor(tag = 'div') { this.tagName = tag; this.attributes = new Map(); this.children = []; this.style = { setProperty(name, value) { this[name] = String(value); } }; this.inert = false; this.classList = { contains: name => this.classes?.has(name) ?? false }; }
     setAttribute(key, value) { this.attributes.set(key, String(value)); }
     getAttribute(key) { return this.attributes.get(key); }
     append(child) { this.children.push(child); child.parent = this; }
@@ -180,6 +181,7 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, systemRed
     cancelAnimationFrame(id) { frames.delete(id); },
     console: { warn(...args) { warnings.push(args); } }
   };
+  vm.runInNewContext(hudSource, context);
   vm.runInNewContext(runtimeSource, context);
   return { intro, frames, listeners, motionListeners, warnings, values, writes, style, root, body, field: created.find(node => node.className === 'intro-playfield'), inertElements };
 }
@@ -194,6 +196,43 @@ function runFrame(fixture, timestamp) {
 function descendants(node) {
   return node.children.flatMap(child => [child, ...descendants(child)]);
 }
+
+test('WhiteCat HUD tracks hits, slider hold, and topples backward on the final note', () => {
+  const fixture = runtimeFixture();
+  const nodes = descendants(fixture.field);
+  const byClass = name => nodes.find(node => node.className?.split(' ').includes(name));
+  const value = name => byClass(name).getAttribute('data-value');
+  const keys = nodes.filter(node => node.className === 'intro-hud-key');
+  const boards = nodes.filter(node => node.className?.split(' ').includes('intro-hud-board'));
+  runFrame(fixture, 0);
+  assert.equal(value('intro-hud-score-value'), '00000000');
+  assert.equal(value('intro-hud-combo-value'), '0x');
+  runFrame(fixture, 650);
+  assert.equal(value('intro-hud-combo-value'), '1x');
+  assert.equal(keys[0].getAttribute('data-down'), 'true');
+  runFrame(fixture, 1900);
+  assert.equal(value('intro-hud-combo-value'), '4x');
+  assert.equal(keys[1].getAttribute('data-down'), 'true');
+  runFrame(fixture, 2200);
+  assert.equal(value('intro-hud-combo-value'), '5x');
+  assert.equal(keys[1].getAttribute('data-down'), 'true', 'slider holds K2');
+  runFrame(fixture, 2500);
+  assert.equal(keys[1].getAttribute('data-down'), 'false');
+  assert.equal(value('intro-hud-score-value'), '00001042');
+  assert.ok(boards.every(node => /rotate[XY]\(0deg\)/.test(node.style.transform)));
+  runFrame(fixture, 2820);
+  assert.equal(value('intro-hud-combo-value'), '7x');
+  assert.equal(keys[0].getAttribute('data-down'), 'true');
+  runFrame(fixture, 3000);
+  assert.equal(value('intro-hud-score-value'), '00001558');
+  assert.match(byClass('intro-hud-score').style.transform, /rotateX\(-[\d.]+deg\)/);
+  assert.match(byClass('intro-hud-keys').style.transform, /rotateY\(-[\d.]+deg\)/);
+  assert.match(byClass('intro-hud-combo').style.transform, /rotateX\([\d.]+deg\)/);
+  runFrame(fixture, 3400);
+  assert.ok(boards.every(node => node.style.opacity === '0'));
+  fixture.intro.finish();
+  assert.equal(fixture.field.removed, true);
+});
 
 test('Background stays black through gameplay and fades in with the menu', () => {
   const fixture = runtimeFixture();
@@ -218,26 +257,46 @@ test('Final hit flashes softly and sends varied stars inward from both lower edg
     const nodes = descendants(fixture.field);
     const stars = nodes.filter(node => node.getAttribute('class') === 'intro-burst-star');
     const flash = nodes.find(node => node.getAttribute('class') === 'intro-hit-flash');
-    assert.ok(stars.length >= 48);
+    assert.equal(stars.length, viewport.width < 600 ? 72 : 120);
     runFrame(fixture, 0);
     runFrame(fixture, 2819);
     assert.ok(stars.every(star => star.getAttribute('opacity') === '0'));
     assert.equal(flash.getAttribute('opacity'), '0');
     runFrame(fixture, 2865);
     assert.equal(Number(flash.getAttribute('opacity')), .22);
-    runFrame(fixture, 3100);
+    const emitted = [];
+    for (const time of [2920, 3020, 3120, 3220]) {
+      runFrame(fixture, time);
+      emitted.push(stars.filter(star => Number(star.getAttribute('opacity')) > 0).length);
+    }
+    const batches = emitted.map((count, index) => count - (emitted[index - 1] ?? 0));
+    assert.ok(batches[0] > batches[1] && batches[1] > batches[2] && batches[2] > batches[3], 'emission should taper over the first half second');
+    runFrame(fixture, 3300);
     const positions = stars.map(star => star.getAttribute('transform').match(/translate\(([-\d.]+) ([-\d.]+)\)/).slice(1).map(Number));
     assert.ok(stars.every(star => Number(star.getAttribute('opacity')) > 0));
     assert.ok(new Set(stars.map(star => star.getAttribute('opacity'))).size > 10);
     assert.ok(new Set(stars.map(star => star.getAttribute('transform').split('scale(')[1])).size > 10);
     const left = positions.slice(0, stars.length / 2), right = positions.slice(stars.length / 2);
-    assert.ok(left.every(([x]) => x > 0 && x < viewport.width / 2));
-    assert.ok(right.every(([x]) => x > viewport.width / 2 && x < viewport.width));
+    assert.ok(left.every(([x]) => x < viewport.width / 2));
+    assert.ok(right.every(([x]) => x > viewport.width / 2));
     assert.ok(positions.every(([, y]) => y < viewport.height));
     runFrame(fixture, 3830);
-    assert.ok(stars.every(star => star.getAttribute('opacity') === '0'));
+    assert.ok(stars.some(star => Number(star.getAttribute('opacity')) > 0));
     assert.equal(flash.getAttribute('opacity'), '0');
-    fixture.intro.finish();
+    runFrame(fixture, 3860);
+    assert.equal(fixture.intro.active, false);
+    assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
+    runFrame(fixture, 4300);
+    const fallingY = stars.map(star => Number(star.getAttribute('transform').match(/translate\([\d.-]+ ([\d.-]+)\)/)[1]));
+    runFrame(fixture, 4450);
+    const fallingX = stars.map(star => Number(star.getAttribute('transform').match(/translate\(([\d.-]+)/)[1]));
+    assert.ok(fallingX.some(x => x > 0 && x < viewport.width * .025), 'falling stars should reach the left edge');
+    assert.ok(fallingX.some(x => x < viewport.width && x > viewport.width * .975), 'falling stars should reach the right edge');
+    stars.forEach((star, index) => {
+      const y = Number(star.getAttribute('transform').match(/translate\([\d.-]+ ([\d.-]+)\)/)[1]);
+      assert.ok(y > fallingY[index], 'stars should fall downward under gravity');
+    });
+    runFrame(fixture, 5320);
     assert.equal(fixture.field.removed, true);
   }
 });
@@ -256,6 +315,8 @@ test('Runtime renders through the final cookie morph and restores inert state', 
   assert.equal(fixture.intro.active, false);
   assert.ok(fixture.inertElements[0].inert);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
+  assert.notEqual(fixture.field.removed, true);
+  runFrame(fixture, 5420); // remaining stars finish falling after the menu becomes interactive
   assert.equal(fixture.field.removed, true);
   assert.equal([...fixture.style].some(key => key.startsWith('--intro-')), false);
   assert.deepEqual(fixture.warnings, []);
@@ -315,9 +376,9 @@ test('Boot eligibility honors session storage, deep links, replay, and productio
   assert.equal(bootFixture({ seen: true }).intro.active, false);
   assert.equal(bootFixture({ hash: '#about' }).intro.active, false);
   assert.equal(bootFixture({ search: '?intro=replay', seen: true }).intro.active, false);
-  const localReplay = bootFixture({ hostname: 'localhost', search: '?intro=replay&introAt=4100', seen: true });
+  const localReplay = bootFixture({ hostname: 'localhost', search: '?intro=replay&introAt=6000', seen: true });
   assert.equal(localReplay.intro.active, true);
-  assert.equal(localReplay.intro.reviewTime, 3860);
+  assert.equal(localReplay.intro.reviewTime, 5320);
   assert.equal(localReplay.timers.size, 1);
   assert.equal(bootFixture({ hostname: 'example.com', search: '?intro=replay' }).intro.active, true);
   assert.equal(bootFixture({ hostname: 'example.com', search: '?intro=replay', seen: true }).intro.active, false);

@@ -18,7 +18,7 @@
     active,
     reduced: motionOff,
     // A local-only still frame is useful for reviewing timing at narrow sizes.
-    reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(3860, Number(params.get('introAt')) || 0)) : null,
+    reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(5320, Number(params.get('introAt')) || 0)) : null,
     onFinish(cleanup) { cleanups.push(cleanup); },
     finish() {
       if (!intro.active) return;

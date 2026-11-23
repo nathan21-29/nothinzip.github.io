@@ -16,7 +16,7 @@ function check(name, test) { test(); count++; console.log(`PASS ${name}`); }
 
 check('Application JavaScript parses', () => new vm.Script(app));
 check('Startup and cursor JavaScript parse', () => {
-  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro.js', 'cursor.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
+  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro.js', 'cursor.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
 });
 const context = { window: {} };
 vm.createContext(context);
@@ -59,6 +59,11 @@ check('All stylesheet image assets exist', () => {
 });
 check('Startup skin assets exist', () => {
   for (const file of ['cursor-0.7x.png', 'cursortrail@2x.png', 'approachcircle@2x.png', 'hitcircleoverlay@2x.png']) assert.ok(existsSync(resolve(dist, 'assets/whitecat', file)), file);
+});
+check('WhiteCat gameplay HUD sprites exist', () => {
+  const files = ['inputoverlay-background', 'inputoverlay-key', 'score-dot', 'score-percent', 'combo-x'];
+  for (const prefix of ['score', 'combo']) for (let digit = 0; digit <= 9; digit++) files.push(`${prefix}-${digit}`);
+  for (const file of files) assert.ok(existsSync(resolve(dist, 'assets/whitecat', `${file}@2x.png`)), file);
 });
 check('HTML IDs are unique', () => {
   const ids = Array.from(html.matchAll(/\bid="([^"]+)"/g), match => match[1]);

@@ -9,26 +9,30 @@
   const restores = [];
   let frame = 0;
   let field;
+  let burstTail = false;
   let motionObserver;
   const set = (name, value) => root.style.setProperty(`--intro-${name}`, String(value));
   const groups = [];
   const radius = T.diameter / 2;
   let start;
 
-  function release() {
+  function clearField() {
     cancelAnimationFrame(frame);
     field?.remove();
-    motionObserver?.disconnect();
     window.removeEventListener('resize', onResize);
     window.removeEventListener('hashchange', onHistoryChange);
     window.removeEventListener('popstate', onHistoryChange);
+  }
+  function release() {
+    if (!burstTail) clearField();
+    motionObserver?.disconnect();
     for (const [element, inert] of restores) element.inert = inert;
     // Restart at scale 1, the same pose as the end of the morph.
     for (const property of [...root.style]) if (property.startsWith('--intro-')) root.style.removeProperty(property);
   }
   intro.onFinish(release);
-  function onResize() { intro.finish(); }
-  function onHistoryChange() { intro.finish(); }
+  function onResize() { clearField(); intro.finish(); }
+  function onHistoryChange() { clearField(); intro.finish(); }
   function onMotionChange() { if (document.body.classList.contains('reduced-motion')) intro.finish(); }
 
   try {
@@ -92,6 +96,7 @@
     field.setAttribute('aria-hidden', 'true');
     field.innerHTML = `<svg xmlns="${svgNS}" viewBox="0 0 ${innerWidth} ${innerHeight}"><g class="intro-composition" transform="translate(${center.x} ${center.y}) scale(${scale})"></g></svg><p class="intro-skip">Click or Enter to skip</p>`;
     document.body.append(field);
+    const hud = window.IntroHUD.create(field, T, innerWidth, innerHeight);
     const composition = field.querySelector('g');
     const create = (tag, attributes, parent = composition) => {
       const node = document.createElementNS(svgNS, tag);
@@ -113,21 +118,33 @@
       const r = index % 2 ? .44 : 1;
       return `${Math.cos(angle) * r},${Math.sin(angle) * r}`;
     }).join(' ');
-    const starsPerSide = innerWidth < 600 ? 24 : 42;
+    const starsPerSide = innerWidth < 600 ? 24 : 40;
+    const edgeStarsPerSide = innerWidth < 600 ? 12 : 20;
+    const emissionDuration = 500;
+    const burstEnd = T.final.hit + 2500;
     const stars = [];
     // Fixed variations keep replay frames stable without a second animation loop.
     const variation = (index, salt) => ((index * salt + 17) % 101) / 100;
     for (const side of [-1, 1]) {
-      for (let index = 0; index < starsPerSide; index++) {
+      for (let index = 0; index < starsPerSide + edgeStarsPerSide; index++) {
         const seed = index + (side === 1 ? 47 : 0);
+        const nearEdge = index >= starsPerSide;
+        const count = starsPerSide + edgeStarsPerSide;
+        // Invert a linearly declining emission rate: maximum at the hit, zero at 0.5s.
+        // Shuffle timing across launch angles so each part of the fan remains covered.
+        const emissionRank = (index * 17 + (side === 1 ? 11 : 0)) % count;
+        const delay = emissionDuration * (1 - Math.sqrt(1 - (emissionRank + .5) / count));
+        const fanPosition = ((nearEdge ? index - starsPerSide : index) + .5) / (nearEdge ? edgeStarsPerSide : starsPerSide);
         stars.push({
           node: create('polygon', { points: starPoints, class: 'intro-burst-star', opacity: 0 }, burst),
           side,
-          delay: variation(seed, 37) * 130,
-          lifetime: 700 + variation(seed, 29) * 170,
+          inset: nearEdge ? 3 : -12,
+          delay,
+          lifetime: Math.min(1800 + variation(seed, 29) * 500, burstEnd - T.final.hit - delay),
           y: innerHeight * (.74 + variation(seed, 43) * .24),
-          travel: innerWidth * (.22 + variation(seed, 61) * .26),
-          rise: innerHeight * (.27 + variation(seed, 53) * .44),
+          // Extra near-vertical launches fill the whole gap between the edge and inward fan.
+          travel: innerWidth * (nearEdge ? .002 + fanPosition * .24 : .22 + fanPosition * .26),
+          launchSpeed: innerHeight * (.8 + variation(seed, 53) * .5),
           size: (3 + variation(seed, 19) ** 1.7 * 12) * Math.min(1, innerWidth / 700),
           brightness: .2 + variation(seed, 71) * .8,
           rotation: variation(seed, 31) * 360,
@@ -141,11 +158,19 @@
       flash.setAttribute('opacity', .22 * T.clamp(hitAge / 45) * (1 - T.ease((hitAge - 45) / 420)));
       for (const star of stars) {
         const age = time - T.final.hit - star.delay;
+        if (age < 0 || age >= star.lifetime) {
+          if (star.visible) star.node.setAttribute('opacity', 0);
+          star.visible = false;
+          continue;
+        }
+        star.visible = true;
         const p = T.clamp(age / star.lifetime);
         const travel = 1 - (1 - p) ** 2;
-        const x = (star.side === -1 ? -12 : innerWidth + 12) - star.side * star.travel * travel;
-        const y = star.y - star.rise * (1.6 * p - .6 * p * p);
-        const opacity = age < 0 ? 0 : star.brightness * T.clamp(age / 55) * (1 - T.clamp((p - .5) / .5));
+        const x = (star.side === -1 ? star.inset : innerWidth - star.inset) - star.side * star.travel * travel;
+        const seconds = Math.max(0, age) / 1000;
+        // Screen y increases downward: gravity slows the launch, then pulls stars back down.
+        const y = star.y - star.launchSpeed * seconds + .5 * innerHeight * 1.15 * seconds ** 2;
+        const opacity = star.brightness * T.clamp(age / 55) * (1 - T.clamp((p - .72) / .28));
         star.node.setAttribute('opacity', opacity);
         star.node.setAttribute('transform', `translate(${x} ${y}) rotate(${star.rotation + star.spin * p}) scale(${star.size * (1 - .35 * p)})`);
       }
@@ -206,6 +231,7 @@
       ripple.setAttribute('r', radius + 24 * T.ease(age / 260));
     }
     function draw(time) {
+      hud.draw(time);
       const morph = T.ease((time - T.final.hit) / 680);
       set('logo-scale', T.mix(hitScale, 1, morph));
       set('logo-opacity', T.clamp((time - (T.final.hit - T.approach)) / T.fadeIn));
@@ -261,13 +287,31 @@
       });
       field.querySelector('.intro-skip').style.opacity = String(.6 * (1 - T.clamp((time - 2800) / 250)));
     }
+    // Let the remaining confetti fall over the usable menu after the reveal completes.
+    const tickBurstTail = timestamp => {
+      try {
+        const time = timestamp - start;
+        if (time >= burstEnd || document.hidden || document.body.classList.contains('reduced-motion')) {
+          clearField();
+          return;
+        }
+        drawBurst(time);
+        frame = requestAnimationFrame(tickBurstTail);
+      } catch {
+        clearField();
+      }
+    };
     const tick = timestamp => {
       if (!intro.active) return;
       try {
         if (start === undefined) start = timestamp;
         const time = intro.reviewTime ?? Math.min(T.duration, timestamp - start);
         draw(time);
-        if (time >= T.duration) intro.finish();
+        if (time >= T.duration && intro.reviewTime === null) {
+          burstTail = true;
+          intro.finish();
+          frame = requestAnimationFrame(tickBurstTail);
+        }
         else if (intro.reviewTime === null) frame = requestAnimationFrame(tick);
       } catch (error) {
         console.warn('Startup animation ended early.', error);
