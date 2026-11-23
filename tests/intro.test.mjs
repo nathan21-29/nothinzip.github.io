@@ -105,7 +105,7 @@ function inputEvent(key, extra = {}) {
   return { key, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; }, ...extra };
 }
 
-function runtimeFixture({ width = 1440, height = 900, reduced = false, failSvg = false, offscreen = false } = {}) {
+function runtimeFixture({ width = 1440, height = 900, reduced = false, systemReduced = false, failSvg = false, offscreen = false } = {}) {
   const listeners = new Map();
   const frames = new Map();
   const created = [];
@@ -151,7 +151,7 @@ function runtimeFixture({ width = 1440, height = 900, reduced = false, failSvg =
     createElementNS(_ns, tag) { if (failSvg) throw new Error('SVG unavailable'); return new Element(tag); }
   };
   const motionListeners = new Set();
-  const motionQuery = { matches: reduced, addEventListener(_type, fn) { motionListeners.add(fn); }, removeEventListener(_type, fn) { motionListeners.delete(fn); } };
+  const motionQuery = { matches: systemReduced, addEventListener(_type, fn) { motionListeners.add(fn); }, removeEventListener(_type, fn) { motionListeners.delete(fn); } };
   class MutationObserverStub { constructor(fn) { this.fn = fn; } observe() {} disconnect() { this.disconnected = true; } }
   class ImageStub {}
   const intro = {
@@ -280,15 +280,39 @@ test('Boot eligibility honors session storage, deep links, replay, and productio
   assert.equal(bootFixture({ hostname: 'localhost', search: '?intro=off' }).intro.active, false);
 });
 
-test('Boot handles storage failures and reduced motion without breaking activation', () => {
+test('Boot handles storage failures without letting system reduced motion disable gameplay', () => {
   const fixture = bootFixture({ storageBlocked: true, reduced: true });
   assert.equal(fixture.intro.active, true);
-  assert.equal(fixture.intro.reduced, true);
-  assert.equal(fixture.root.dataset.intro, 'fade');
+  assert.equal(fixture.intro.reduced, false);
+  assert.equal(fixture.root.dataset.intro, 'pending');
   fixture.intro.finish();
   assert.equal(fixture.intro.active, false);
   assert.deepEqual(fixture.dispatched, ['site:intro-end']);
   assert.deepEqual(fixture.root.removed, ['data-intro']);
+});
+
+test('Only the site motion preference reduces the intro', () => {
+  assert.equal(bootFixture({ reduced: true }).intro.reduced, false);
+  assert.equal(bootFixture({ reduced: true, motion: 'on' }).intro.reduced, false);
+  const disabled = bootFixture({ motion: 'off' });
+  assert.equal(disabled.intro.reduced, true);
+  assert.equal(disabled.root.dataset.intro, 'fade');
+  const runtime = runtimeFixture({ systemReduced: true });
+  assert.ok(runtime.field);
+  assert.equal(runtime.intro.active, true);
+  runtime.intro.finish();
+});
+
+test('Intro uses AR 9.2 timing and larger skin circles', () => {
+  const timeline = timelineFixture();
+  assert.ok(Math.abs(timeline.approach - (1200 - 150 * (timeline.approachRate - 5))) < 1e-9);
+  assert.equal(timeline.fadeIn, timeline.approach * 2 / 3);
+  assert.ok(timeline.diameter > 82);
+  const runtime = runtimeFixture();
+  const sprites = runtime.field;
+  assert.ok(sprites);
+  assert.match(runtimeSource, /assets\/whitecat\/hitcircle@2x.png/);
+  runtime.intro.finish();
 });
 
 test('Boot finish runs every cleanup once and persists completion', () => {

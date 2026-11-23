@@ -12,7 +12,7 @@ html[data-intro] .cookie-pulse{animation:none;transform:scale(var(--intro-logo-s
 html[data-intro] .cookie{transform:translateZ(0);transition:none;background:var(--intro-fill,#c7568d);box-shadow:0 calc(.5625rem * var(--intro-depth,0)) 0 #a54379,0 calc(1.25rem * var(--intro-depth,0)) calc(3.125rem * var(--intro-depth,0)) #10071090,inset 0 0 0 var(--intro-rim,.625rem) #fff7fb}
 html[data-intro] .cookie-facets{opacity:var(--intro-facets,0)}
 html[data-intro] .cookie-word{opacity:var(--intro-word,0);transform:scale(var(--intro-word-scale,.88))}
-html[data-intro] #main-cookie::after{content:'5';position:absolute;inset:0;display:grid;place-items:center;font-family:Aller,'Trebuchet MS',sans-serif;font-size:calc(var(--intro-logo-size,400px) * .4);font-weight:400;opacity:var(--intro-number,0);text-shadow:0 2px 6px #39102780}
+html[data-intro] #main-cookie::after{content:'';position:absolute;inset:0;background:url('assets/whitecat/default-5@2x.png') center/39.0625% 39.0625% no-repeat;opacity:var(--intro-number,0);pointer-events:none}
 html[data-intro] .cookie-halo{opacity:var(--intro-halo,0)}
 html[data-intro] .cookie-spectrum{opacity:var(--intro-spectrum,0);transform:scale(var(--intro-spectrum-scale,.72))}
 html[data-intro="pending"] .cookie-spectrum svg,
@@ -23,17 +23,15 @@ html[data-intro] .whitecat-trail{visibility:hidden}
 html[data-intro] .intro-dim{position:fixed;inset:0;z-index:0;background:#100b13;opacity:var(--intro-dim,.66);pointer-events:none}
 .intro-playfield{position:fixed;inset:0;z-index:4;overflow:hidden;pointer-events:none;contain:strict}
 .intro-playfield svg{display:block;width:100%;height:100%;overflow:visible}
-.intro-circle-fill{fill:#c7568d;stroke:#fff7fb;stroke-width:3}
-.intro-skin-overlay{opacity:.55}
-.intro-number{fill:#fff9fc;font-family:Aller,'Trebuchet MS',sans-serif;font-size:32px;text-anchor:middle;dominant-baseline:central}
-.intro-approach-fallback{fill:none;stroke:#f5abd1;stroke-width:2;opacity:.7}
+.intro-skin-overlay{opacity:1}
+html[data-intro="pending"] #main-cookie::before,html[data-intro="settling"] #main-cookie::before{content:'';position:absolute;inset:0;border-radius:50%;background:url('assets/whitecat/hitcircleoverlay@2x.png') center/100% 100% no-repeat,url('assets/whitecat/hitcircle@2x.png') center/100% 100% no-repeat;opacity:var(--intro-skin-opacity,1);pointer-events:none}
 .intro-approach-skin{opacity:.9}
-.intro-ripple{fill:none;stroke:#f8bedb;stroke-width:1.5}
-.intro-slider-border{fill:none;stroke:#fff2f9;stroke-width:82;stroke-linecap:round;opacity:.8}
-.intro-slider-track{fill:none;stroke:#4b2541;stroke-width:76;stroke-linecap:round}
-.intro-slider-guide{fill:none;stroke:#ee96bd;stroke-width:2;stroke-dasharray:2 13;stroke-linecap:round;opacity:.5}
-.intro-slider-follow{fill:#ec87b81a;stroke:#f9b7d8;stroke-width:2}
-.intro-slider-ball{fill:#e98fba;stroke:#fff7fb;stroke-width:3}
+.intro-ripple{fill:none;stroke:#ddd;stroke-width:1.5}
+.intro-slider-border{fill:none;stroke:#505050;stroke-width:110;stroke-linecap:round;opacity:.8}
+.intro-slider-track{fill:none;stroke:#000;stroke-width:104;stroke-linecap:round}
+.intro-slider-guide{fill:none;stroke:#aaa;stroke-width:6;stroke-dasharray:0 48;stroke-linecap:round;opacity:.5}
+.intro-slider-follow{fill:#ffffff1a;stroke:#fff;stroke-width:2}
+.intro-slider-ball{fill:#aaa;stroke:#fff;stroke-width:3}
 .intro-cursor-fallback{fill:#ffe5f4;stroke:#ef81ba;stroke-width:3}
 .intro-skip{position:fixed;bottom:1.25rem;right:1.5rem;margin:0;color:#dac2d3;font:400 .75rem Aller,'Trebuchet MS',sans-serif;letter-spacing:.06em;opacity:.6}
 html[data-intro="fade"] .intro-dim{opacity:var(--intro-dim,.45)}

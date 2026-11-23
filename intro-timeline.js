@@ -55,5 +55,5 @@
         + (-2 * t3 + 3 * t2) * b.y + (t3 - t2) * duration * to.y + (b.x - a.x) / distance * bow
     };
   }
-  window.IntroTimeline = Object.freeze({ duration: 3860, approach: 650, diameter: 82, circles, slider, final, clamp, ease, mix, sliderAt, cursorAt });
+  window.IntroTimeline = Object.freeze({ duration: 3860, approachRate: 9.2, approach: 570, fadeIn: 380, diameter: 110, circles, slider, final, clamp, ease, mix, sliderAt, cursorAt });
 })();

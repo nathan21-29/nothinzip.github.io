@@ -16,7 +16,7 @@
   let watchdog;
   const intro = window.SiteIntro = {
     active,
-    reduced: motionOff || matchMedia('(prefers-reduced-motion: reduce)').matches,
+    reduced: motionOff,
     // A local-only still frame is useful for reviewing timing at narrow sizes.
     reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(3860, Number(params.get('introAt')) || 0)) : null,
     onFinish(cleanup) { cleanups.push(cleanup); },

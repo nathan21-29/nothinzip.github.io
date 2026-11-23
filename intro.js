@@ -11,9 +11,9 @@
   let field;
   let dim;
   let motionObserver;
-  const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
   const set = (name, value) => root.style.setProperty(`--intro-${name}`, String(value));
   const groups = [];
+  const radius = T.diameter / 2;
   let start;
 
   function release() {
@@ -21,7 +21,6 @@
     field?.remove();
     dim?.remove();
     motionObserver?.disconnect();
-    motionQuery.removeEventListener('change', onMotionChange);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('hashchange', onHistoryChange);
     window.removeEventListener('popstate', onHistoryChange);
@@ -32,7 +31,7 @@
   intro.onFinish(release);
   function onResize() { intro.finish(); }
   function onHistoryChange() { intro.finish(); }
-  function onMotionChange() { if (motionQuery.matches || document.body.classList.contains('reduced-motion')) intro.finish(); }
+  function onMotionChange() { if (document.body.classList.contains('reduced-motion')) intro.finish(); }
 
   try {
     if (!T) throw new Error('Intro timeline unavailable');
@@ -62,7 +61,6 @@
     window.addEventListener('resize', onResize, { passive: true });
     window.addEventListener('hashchange', onHistoryChange);
     window.addEventListener('popstate', onHistoryChange);
-    motionQuery.addEventListener('change', onMotionChange);
     motionObserver = new MutationObserver(onMotionChange);
     motionObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
@@ -77,7 +75,7 @@
       }
     }
 
-    if (intro.reduced || document.body.classList.contains('reduced-motion') || motionQuery.matches) {
+    if (intro.reduced || document.body.classList.contains('reduced-motion')) {
       root.dataset.intro = 'fade';
       const fade = time => {
         if (!intro.active) return;
@@ -108,19 +106,18 @@
     };
     const approach = parent => {
       const group = create('g', {}, parent);
-      create('circle', { r: 41, class: 'intro-approach-fallback' }, group);
-      create('image', { href: 'assets/whitecat/approachcircle@2x.png', x: -46, y: -46, width: 92, height: 92, class: 'intro-approach-skin' }, group);
+      create('image', { href: 'assets/whitecat/approachcircle@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-approach-skin' }, group);
       return group;
     };
     const addCircle = (point, parent = composition) => {
       const group = create('g', { transform: `translate(${point.x} ${point.y})`, opacity: 0 }, parent);
       const face = create('g', {}, group);
-      create('circle', { r: 41, class: 'intro-circle-fill' }, face);
-      create('image', { href: 'assets/whitecat/hitcircleoverlay@2x.png', x: -41, y: -41, width: 82, height: 82, class: 'intro-skin-overlay' }, face);
-      const text = create('text', { class: 'intro-number' }, face);
-      text.textContent = point.number;
+      create('image', { href: 'assets/whitecat/hitcircle@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-skin-base' }, face);
+      create('image', { href: 'assets/whitecat/hitcircleoverlay@2x.png', x: -radius, y: -radius, width: T.diameter, height: T.diameter, class: 'intro-skin-overlay' }, face);
+      const numberSize = T.diameter * 100 / 256;
+      create('image', { href: `assets/whitecat/default-${point.number}@2x.png`, x: -numberSize / 2, y: -numberSize / 2, width: numberSize, height: numberSize }, face);
       const ring = approach(group);
-      const ripple = create('circle', { r: 41, class: 'intro-ripple', opacity: 0 }, group);
+      const ripple = create('circle', { r: radius, class: 'intro-ripple', opacity: 0 }, group);
       const object = { point, group, face, ring, ripple };
       groups.push(object);
       return object;
@@ -132,13 +129,13 @@
     for (const className of ['intro-slider-border', 'intro-slider-track', 'intro-slider-guide']) create('path', { d: path, class: className }, sliderGroup);
     const sliderHead = addCircle({ ...a, hit: T.slider.start, number: 4 });
     const follow = create('g', { opacity: 0 });
-    create('circle', { r: 55, class: 'intro-slider-follow' }, follow);
-    create('circle', { r: 35, class: 'intro-slider-ball' }, follow);
+    create('circle', { r: radius * 1.35, class: 'intro-slider-follow' }, follow);
+    create('circle', { r: radius * .85, class: 'intro-slider-ball' }, follow);
     T.circles.forEach(point => addCircle(point));
-    const tailRipple = create('circle', { cx: d.x, cy: d.y, r: 41, class: 'intro-ripple', opacity: 0 });
+    const tailRipple = create('circle', { cx: d.x, cy: d.y, r: radius, class: 'intro-ripple', opacity: 0 });
     // The fifth circle itself is #main-cookie. Only its approach ring and ripple are SVG.
     const finalRing = approach(composition);
-    const finalRipple = create('circle', { r: 41, class: 'intro-ripple', opacity: 0 });
+    const finalRipple = create('circle', { r: radius, class: 'intro-ripple', opacity: 0 });
     const trail = create('g', {});
     const cursor = create('g', {});
     const cursorFallback = create('circle', { r: 10, class: 'intro-cursor-fallback' }, cursor);
@@ -154,22 +151,23 @@
       const { point, group, face, ring, ripple } = object;
       const until = point.hit - time;
       const age = time - point.hit;
-      group.setAttribute('opacity', until > T.approach || age > 260 ? 0 : T.clamp((T.approach - until) / 100));
+      group.setAttribute('opacity', until > T.approach || age > 260 ? 0 : T.clamp((T.approach - until) / T.fadeIn));
       face.setAttribute('opacity', age < 0 ? 1 : 1 - T.clamp(age / 130));
       face.setAttribute('transform', `scale(${age < 0 ? 1 : 1 + .13 * T.ease(age / 180)})`);
       ring.setAttribute('opacity', until > 0 ? 1 : 0);
       ring.setAttribute('transform', `scale(${1 + 1.15 * T.clamp(until / T.approach)})`);
       ripple.setAttribute('opacity', age >= 0 ? .65 * (1 - T.clamp(age / 260)) : 0);
-      ripple.setAttribute('r', 41 + 24 * T.ease(age / 260));
+      ripple.setAttribute('r', radius + 24 * T.ease(age / 260));
     }
     function draw(time) {
       const morph = T.ease((time - T.final.hit) / 680);
       set('logo-scale', T.mix(hitScale, 1, morph));
-      set('logo-opacity', T.clamp((time - (T.final.hit - T.approach)) / 100));
+      set('logo-opacity', T.clamp((time - (T.final.hit - T.approach)) / T.fadeIn));
+      set('skin-opacity', 1 - morph);
       set('number', 1 - T.clamp((time - T.final.hit) / 130));
       // Compensate the early rim for scale, keeping its visible weight at 3px.
-      set('rim', `${T.mix(3 / hitScale, rimWidth, morph)}px`);
-      set('fill', `rgb(${T.mix(199, 230, morph)} ${T.mix(86, 109, morph)} ${T.mix(141, 166, morph)})`);
+      set('rim', `${T.mix(0, rimWidth, morph)}px`);
+      set('fill', `rgb(${T.mix(0, 230, morph)} ${T.mix(0, 109, morph)} ${T.mix(0, 166, morph)})`);
       set('facets', .7 * T.ease((time - 2920) / 440));
       set('word', T.ease((time - 3000) / 420));
       set('word-scale', T.mix(.88, 1, T.ease((time - 3000) / 500)));
@@ -188,19 +186,19 @@
       set('footer-y', `${-110 * settle(footer)}px`);
       groups.forEach(object => drawCircle(object, time));
       const sliderAge = time - T.slider.end;
-      sliderGroup.setAttribute('opacity', T.clamp((time - (T.slider.start - T.approach)) / 140) * (1 - T.clamp(sliderAge / 200)));
+      sliderGroup.setAttribute('opacity', T.clamp((time - (T.slider.start - T.approach)) / T.fadeIn) * (1 - T.clamp(sliderAge / 200)));
       const sliding = time >= T.slider.start && time <= T.slider.end;
       const sliderPoint = T.sliderAt((time - T.slider.start) / (T.slider.end - T.slider.start));
       follow.setAttribute('opacity', sliding ? 1 : 0);
       follow.setAttribute('transform', `translate(${sliderPoint.x} ${sliderPoint.y})`);
       if (sliding) sliderHead.face.setAttribute('opacity', 0);
       tailRipple.setAttribute('opacity', sliderAge >= 0 ? .6 * (1 - T.clamp(sliderAge / 260)) : 0);
-      tailRipple.setAttribute('r', 41 + 24 * T.ease(sliderAge / 260));
+      tailRipple.setAttribute('r', radius + 24 * T.ease(sliderAge / 260));
       const untilFinal = T.final.hit - time;
-      finalRing.setAttribute('opacity', untilFinal > 0 ? T.clamp((T.approach - untilFinal) / 100) : 0);
+      finalRing.setAttribute('opacity', untilFinal > 0 ? T.clamp((T.approach - untilFinal) / T.fadeIn) : 0);
       finalRing.setAttribute('transform', `scale(${1 + 1.15 * T.clamp(untilFinal / T.approach)})`);
       finalRipple.setAttribute('opacity', time >= T.final.hit ? .6 * (1 - T.clamp((time - T.final.hit) / 300)) : 0);
-      finalRipple.setAttribute('r', 41 + 28 * T.ease((time - T.final.hit) / 300));
+      finalRipple.setAttribute('r', radius + 28 * T.ease((time - T.final.hit) / 300));
       const cursorOpacity = T.clamp((time - 100) / 180) * (1 - T.clamp((time - T.final.hit) / 180));
       const point = T.cursorAt(time);
       cursor.setAttribute('opacity', cursorOpacity);
