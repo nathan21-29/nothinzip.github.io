@@ -98,13 +98,7 @@
         count.textContent = '0';
         return { row, count, presses: 0, down: null };
       });
-      const events = [
-        ...timeline.circles.map((point, index) => ({ time: point.hit, score: [300, 624, 972][index], key: index % 2 })),
-        { time: timeline.slider.start, score: 1002, key: 1 },
-        { time: (timeline.slider.start + timeline.slider.end) / 2, score: 1012 },
-        { time: timeline.slider.end, score: 1042 },
-        { time: timeline.final.hit, score: 1558, key: 0 }
-      ];
+      const events = timeline.events;
       setAccuracy('100.00%');
       let finished = false;
       let previousProgress;
@@ -118,12 +112,13 @@
           const last = events[hitCount - 1];
           const age = last ? time - last.time : Infinity;
           const hitPulse = 1 - timeline.clamp(age / 170);
-          const lastScore = events[hitCount - 2]?.score ?? 0;
-          const animatedScore = Math.round(timeline.mix(lastScore, last?.score ?? 0, timeline.ease(age / 100)));
+          const initial = timeline.beatmap.ss.initial;
+          const lastScore = events[hitCount - 2]?.score ?? initial.score;
+          const animatedScore = Math.round(timeline.mix(lastScore, last?.score ?? initial.score, timeline.ease(age / 100)));
           setScore(String(animatedScore).padStart(8, '0'));
-          setCombo(`${hitCount}x`);
+          setCombo(`${last?.combo ?? initial.combo}x`);
           style(combo, '--hud-combo-pulse', 1 + .12 * hitPulse);
-          const songProgress = timeline.clamp(time / timeline.final.hit);
+          const songProgress = timeline.clamp((time + timeline.offset) / timeline.beatmap.end);
           const angle = Math.PI * 2 * songProgress;
           if (songProgress !== previousProgress) progressFill.setAttribute('d', songProgress === 1
             ? 'M32 18 A14 14 0 1 1 4 18 A14 14 0 1 1 32 18 Z'
@@ -131,7 +126,7 @@
           previousProgress = songProgress;
           keyRows.forEach((key, index) => {
             const { row, count } = key;
-            let presses = 0, lastPress;
+            let presses = initial.keyPresses[index] ?? 0, lastPress;
             for (let hit = 0; hit < hitCount; hit++) {
               if (events[hit].key !== index) continue;
               presses++;
@@ -139,8 +134,8 @@
             }
             if (key.presses !== presses) count.textContent = String(presses);
             key.presses = presses;
-            const held = index === 1 && time >= timeline.slider.start && time < timeline.slider.end;
-            const down = held || !!lastPress && time - lastPress.time < 95;
+            const held = timeline.sliders.some(slider => slider.key === index && time >= slider.start && time < slider.end);
+            const down = held || !!lastPress && time - lastPress.time < 55;
             if (key.down !== down) {
               row.setAttribute('data-down', down ? 'true' : 'false');
               style(row, 'transform', `scale(${down ? .94 : 1})`);

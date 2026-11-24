@@ -85,9 +85,12 @@
     const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     // The existing short-window menu is scrollable. Never lock an offscreen logo away.
     if (center.y > innerHeight - 70 || center.y < 100) { intro.finish(); return; }
-    // Fit the approach rings as well as the circles around the actual logo center.
-    const scale = Math.max(.25, Math.min(1.12, (innerWidth - 28) / 570,
-      (center.y - 24) / 205, (innerHeight - center.y - 42) / 240));
+    // Preserve the map's coordinates and fit every approach ring around the
+    // centre. The menu logo stays at its normal centre throughout the reveal.
+    const padding = T.diameter * 2.15 / 2;
+    const scale = Math.min(1.12, (center.x - 14) / (256 + padding),
+      (innerWidth - center.x - 14) / (256 + padding),
+      (center.y - 24) / (192 + padding), (innerHeight - center.y - 42) / (192 + padding));
     const hitScale = T.diameter * scale / rect.width;
     for (const element of document.querySelectorAll('.topbar, #main-content, .bottom-bar')) {
       restores.push([element, element.inert]);
@@ -144,30 +147,31 @@
     gameplay = window.IntroGameplay.create(starBurst.context, T, center, scale);
     function draw(time) {
       hud.draw(time);
-      const morph = T.ease((time - T.final.hit) / 680);
+      const age = time - T.final.hit;
+      const morph = T.ease(age / 680);
       set('logo-scale', T.mix(hitScale, 1, morph));
-      set('logo-opacity', T.clamp((time - (T.final.hit - T.approach)) / T.fadeIn));
+      set('logo-opacity', T.clamp(age / 100));
       set('skin-opacity', 1 - morph);
-      set('number', 1 - T.clamp((time - T.final.hit) / 130));
-      set('facets', .7 * T.ease((time - 2920) / 440));
-      set('word', T.ease((time - 3000) / 420));
-      set('word-scale', T.mix(.88, 1, T.ease((time - 3000) / 500)));
-      set('depth', morph); set('halo', T.ease((time - 3150) / 520));
-      set('spectrum', T.ease((time - 3140) / 600));
-      set('spectrum-scale', T.mix(.72, 1, T.ease((time - 3140) / 600)));
-      if (time >= 3100 && root.dataset.intro !== 'settling') root.dataset.intro = 'settling';
-      const profile = T.clamp((time - 3100) / 650);
-      const footer = T.clamp((time - 3180) / 650);
+      set('number', 0);
+      set('facets', .7 * T.ease((age - 100) / 440));
+      set('word', T.ease((age - 180) / 420));
+      set('word-scale', T.mix(.88, 1, T.ease((age - 180) / 500)));
+      set('depth', morph); set('halo', T.ease((age - 330) / 520));
+      set('spectrum', T.ease((age - 320) / 600));
+      set('spectrum-scale', T.mix(.72, 1, T.ease((age - 320) / 600)));
+      if (age >= 280 && root.dataset.intro !== 'settling') root.dataset.intro = 'settling';
+      const profile = T.clamp((age - 280) / 650);
+      const footer = T.clamp((age - 360) / 650);
       reveal(profile);
       starBurst.beginFrame();
       starBurst.draw(time);
       gameplay.draw(time);
-      set('footer', T.ease(footer)); set('hint', T.ease((time - 3480) / 360));
+      set('footer', T.ease(footer)); set('hint', T.ease((age - 660) / 360));
       // Fast ease-out with one small, damped settle, matching the menu transitions.
       const settle = progress => progress < .7 ? T.mix(-1, .018, T.ease(progress / .7)) : .018 * (1 - T.ease((progress - .7) / .3));
       set('profile-y', `${(rect.top + 150) * settle(profile)}px`);
       set('footer-y', `${-110 * settle(footer)}px`);
-      skip.style.opacity = String(.6 * (1 - T.clamp((time - 2800) / 250)));
+      skip.style.opacity = String(.6 * (1 - T.clamp((age + 20) / 250)));
     }
     // Let the remaining confetti fall over the usable menu after the reveal completes.
     const tickBurstTail = timestamp => {

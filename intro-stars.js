@@ -108,7 +108,7 @@
         previousTime = time;
         // Make the quality decision before the final-hit/morph/burst overlap.
         // Never reallocate the visible backing store at the busiest instant.
-        if (!qualityChosen && time >= T.slider.start) {
+        if (!qualityChosen && time >= T.qualityAt) {
           qualityChosen = true;
           if (frameSamples >= 12 && frameAverage > 23) {
             lean = true;

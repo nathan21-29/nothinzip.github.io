@@ -18,34 +18,37 @@
       const approach = image('approachcircle@2x');
       const cursor = image('cursor-0.7x');
       const trail = image('cursortrail@2x');
-      for (let number = 1; number <= 4; number++) image(`default-${number}@2x`);
-      const hits = [...T.circles.map(point => point.hit), T.slider.start, T.final.hit];
-      const circles = [...T.circles, { ...T.slider.points[0], hit: T.slider.start, number: 4 }];
+      for (let number = 1; number <= 9; number++) image(`default-${number}@2x`);
+      const hits = T.objects.map(point => point.hit);
       const trailInterval = 1000 / 30;
-      let trailSample = -1;
-      let trailPoints = [];
-      let disposed = false;
-
-      // The slider never changes shape. Rasterize its three strokes once.
-      const track = document.createElement('canvas');
-      track.width = 630;
-      track.height = 375;
-      const ink = track.getContext('2d');
-      if (ink) {
-        ink.setTransform(1.5, 0, 0, 1.5, 270, 30);
-        const [a, b, c, d] = T.slider.points;
-        ink.beginPath();
-        ink.moveTo(a.x, a.y);
-        ink.bezierCurveTo(b.x, b.y, c.x, c.y, d.x, d.y);
-        ink.lineCap = 'round';
-        for (const [width, color, opacity] of [[110, '#505050', .8], [104, '#000', 1], [6, '#aaa', .5]]) {
-          ink.lineWidth = width;
-          ink.strokeStyle = color;
-          ink.globalAlpha = opacity;
-          if (width === 6) ink.setLineDash([0, 48]);
-          ink.stroke();
+      let trailSample = -1, trailPoints = [], disposed = false;
+      // Each of the five perfect-circle sliders is rasterized once, tightly
+      // bounded to its own curve. The visible playfield still uses one canvas.
+      const tracks = T.sliders.map(slider => {
+        const points = slider.path.points, padding = radius + 4;
+        const left = Math.min(...points.map(p => p.x)) - padding;
+        const top = Math.min(...points.map(p => p.y)) - padding;
+        const width = Math.max(...points.map(p => p.x)) + padding - left;
+        const height = Math.max(...points.map(p => p.y)) + padding - top;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(width * 1.5);
+        canvas.height = Math.ceil(height * 1.5);
+        const ink = canvas.getContext('2d');
+        if (ink) {
+          ink.setTransform(1.5, 0, 0, 1.5, -left * 1.5, -top * 1.5);
+          ink.beginPath();
+          points.forEach((point, index) => index ? ink.lineTo(point.x, point.y) : ink.moveTo(point.x, point.y));
+          ink.lineCap = ink.lineJoin = 'round';
+          for (const [strokeWidth, color, opacity] of [[T.diameter, '#505050', .8], [T.diameter - 6, '#000', 1], [6, '#aaa', .5]]) {
+            ink.lineWidth = strokeWidth;
+            ink.strokeStyle = color;
+            ink.globalAlpha = opacity;
+            if (strokeWidth === 6) ink.setLineDash([0, 48]);
+            ink.stroke();
+          }
         }
-      }
+        return { slider, canvas, ink, left, top, width, height };
+      });
       function sprite(source, size, opacity = 1) {
         if (opacity <= 0 || !source.complete || !source.naturalWidth) return false;
         context.globalAlpha = opacity;
@@ -76,19 +79,30 @@
         context.save();
         context.translate(center.x, center.y);
         context.scale(scale, scale);
-        const sliderAge = time - T.slider.end;
-        const trackOpacity = T.clamp((time - (T.slider.start - T.approach)) / T.fadeIn) * (1 - T.clamp(sliderAge / 200));
-        if (trackOpacity > 0 && ink) {
-          context.globalAlpha = trackOpacity;
-          context.drawImage(track, -180, -20, 420, 250);
-        }
-        const sliding = time >= T.slider.start && time <= T.slider.end;
-        for (const point of circles) {
+        // Draw later objects first so the earliest stacked note is on top.
+        for (let index = T.objects.length - 1; index >= 0; index--) {
+          const point = T.objects[index];
           const until = point.hit - time, age = -until;
-          if (until > T.approach || age >= 260) continue;
+          if (until > T.approach || time >= point.end + 260) continue;
           const opacity = T.clamp((T.approach - until) / T.fadeIn);
+          const sliding = !!point.path && time >= point.hit && time < point.end;
+          if (point.path) {
+            const track = tracks.find(track => track.slider === point);
+            const tailAge = time - point.end;
+            const trackOpacity = opacity * (1 - T.clamp(tailAge / 200));
+            if (trackOpacity > 0 && track.ink) {
+              context.globalAlpha = trackOpacity;
+              context.drawImage(track.canvas, track.left, track.top, track.width, track.height);
+            }
+            if (sliding) {
+              const ball = point.path.at((time - point.hit) / point.duration);
+              circle(ball.x, ball.y, radius * 1.35, '#ffffff1a', '#fff', 2, 1);
+              circle(ball.x, ball.y, radius * .85, '#aaa', '#fff', 3, 1);
+            }
+            ripple(point.path.at(1), tailAge, 260, .6, 24);
+          }
           const faceOpacity = opacity * (1 - T.clamp(age / 130));
-          if (faceOpacity > 0 && !(point.number === 4 && sliding)) {
+          if (faceOpacity > 0 && !sliding) {
             context.save();
             context.translate(point.x, point.y);
             const grow = 1 + .13 * T.ease(age / 180);
@@ -101,17 +115,8 @@
           ring(point, until, opacity);
           ripple(point, age, 260, .65 * opacity, 24);
         }
-        if (sliding) {
-          const point = T.sliderAt((time - T.slider.start) / (T.slider.end - T.slider.start));
-          circle(point.x, point.y, radius * 1.35, '#ffffff1a', '#fff', 2, 1);
-          circle(point.x, point.y, radius * .85, '#aaa', '#fff', 3, 1);
-        }
-        ripple(T.slider.points[3], sliderAge, 260, .6, 24);
-        ring(T.final, T.final.hit - time, T.clamp((time - T.final.hit + T.approach) / T.fadeIn));
-        ripple(T.final, time - T.final.hit, 300, .6, 28);
         const opacity = T.clamp((time - 100) / 180) * (1 - T.clamp((time - T.final.hit) / 180));
         if (opacity > 0) {
-          // Reuse positions between the fixed 30 Hz trail samples.
           const sample = Math.floor(time / trailInterval);
           if (sample !== trailSample) {
             trailSample = sample;
@@ -139,7 +144,7 @@
       function dispose() {
         if (disposed) return;
         disposed = true;
-        track.width = track.height = 0;
+        for (const track of tracks) track.canvas.width = track.canvas.height = 0;
         images.clear();
         trailPoints.length = 0;
       }

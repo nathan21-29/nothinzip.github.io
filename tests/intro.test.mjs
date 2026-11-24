@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+const beatmapSource = readFileSync(new URL('../intro-beatmap.js', import.meta.url), 'utf8');
 const timelineSource = readFileSync(new URL('../intro-timeline.js', import.meta.url), 'utf8');
 const bootSource = readFileSync(new URL('../intro-boot.js', import.meta.url), 'utf8');
 const runtimeSource = readFileSync(new URL('../intro.js', import.meta.url), 'utf8');
@@ -13,61 +14,133 @@ const performanceSource = readFileSync(new URL('../intro-performance.js', import
 
 function timelineFixture() {
   const window = {};
+  vm.runInNewContext(beatmapSource, { window });
   vm.runInNewContext(timelineSource, { window });
   return window.IntroTimeline;
 }
 
-test('Timeline cursor arrives at all three circle hit positions', () => {
+const finalHit = 5622, introEnd = 6662, starsEnd = 8122;
+
+test('Gift excerpt matches all 28 original objects and keeps original timing and numbering', () => {
   const timeline = timelineFixture();
-  for (const circle of timeline.circles) {
-    const cursor = timeline.cursorAt(circle.hit);
-    assert.ok(Math.abs(cursor.x - circle.x) < 1e-9);
-    assert.ok(Math.abs(cursor.y - circle.y) < 1e-9);
+  const source = readFileSync(new URL('../assets/beatmaps/padoru-gift.osu', import.meta.url), 'utf8');
+  const rows = source.split('[HitObjects]')[1].trim().split(/\r?\n/).map(line => line.split(','));
+  const closing = rows.filter(row => Number(row[2]) >= 26590);
+  assert.equal(timeline.objects.length, 28);
+  assert.equal(timeline.sliders.length, 5);
+  assert.equal(timeline.objects[0].hit, 570);
+  assert.equal(timeline.final.hit, finalHit);
+  assert.equal(timeline.duration, introEnd);
+  assert.equal(timeline.beatmap.end - timeline.beatmap.start, 5052);
+  for (const [index, point] of timeline.objects.entries()) {
+    const row = closing[index];
+    assert.equal(point.hit + timeline.offset, Number(row[2]));
+    assert.equal(point.x + 256 + point.stack * timeline.diameter / 20, Number(row[0]));
+    assert.equal(point.y + 192 + point.stack * timeline.diameter / 20, Number(row[1]));
+    if (point.path) assert.equal(point.curve, row[5]);
   }
+  assert.equal(timeline.final.number, 4);
+  assert.equal(Math.max(...timeline.objects.map(point => point.number)), 9);
 });
 
-test('Timeline cursor aligns with slider head, tail, and final hit', () => {
+test('Cursor hits every circle and every slider head and follows every slider at constant speed', () => {
   const timeline = timelineFixture();
-  const head = timeline.cursorAt(timeline.slider.start);
-  const tail = timeline.cursorAt(timeline.slider.end);
-  const final = timeline.cursorAt(timeline.final.hit);
-  assert.equal(head.x, timeline.slider.points[0].x);
-  assert.equal(head.y, timeline.slider.points[0].y);
-  assert.equal(tail.x, timeline.slider.points.at(-1).x);
-  assert.equal(tail.y, timeline.slider.points.at(-1).y);
-  assert.ok(Math.abs(final.x - timeline.final.x) < 1e-9);
-  assert.ok(Math.abs(final.y - timeline.final.y) < 1e-9);
-  assert.equal(timeline.duration, 3860);
-  assert.ok(timeline.duration >= 3000 && timeline.duration <= 4000);
-});
-
-test('Timeline travels continuously through circle, slider, and final boundaries', () => {
-  const timeline = timelineFixture();
-  const boundaries = [620, timeline.slider.start, timeline.slider.end, timeline.final.hit];
-  for (const time of boundaries) {
-    const at = timeline.cursorAt(time);
-    for (const offset of [-0.001, 0.001]) {
-      const near = timeline.cursorAt(time + offset);
-      assert.ok(Math.hypot(near.x - at.x, near.y - at.y) < 0.01);
+  for (const object of timeline.objects) {
+    const cursor = timeline.cursorAt(object.hit);
+    assert.ok(Math.hypot(cursor.x - object.x, cursor.y - object.y) < 1e-9);
+  }
+  const durations = [157.8947387695321, 157.8947387695321, 315.7894775390626, 315.7894775390626, 236.842108154297];
+  timeline.sliders.forEach((slider, index) => {
+    assert.ok(Math.abs(slider.duration - durations[index]) < 1e-6);
+    let previous = timeline.cursorAt(slider.start);
+    const steps = 20;
+    const distances = [];
+    for (let step = 1; step <= steps; step++) {
+      const at = timeline.cursorAt(slider.start + slider.duration * step / steps);
+      distances.push(Math.hypot(at.x - previous.x, at.y - previous.y));
+      previous = at;
     }
-  }
-  assert.deepEqual(timeline.cursorAt(-100), timeline.cursorAt(0));
-  assert.deepEqual(timeline.cursorAt(5000), timeline.final);
+    assert.ok(Math.max(...distances) - Math.min(...distances) < 1e-6);
+    assert.ok(Math.abs(distances.reduce((sum, distance) => sum + distance, 0) - slider.length) < .1);
+  });
+  // The first circular arc bends to the right, rather than following its control polygon.
+  const first = timeline.sliders[0];
+  const middle = first.path.at(.5), end = first.path.at(1);
+  assert.ok(Math.hypot(middle.x - (first.x + end.x) / 2, middle.y - (first.y + end.y) / 2) > .1);
 });
 
-test('Timeline keeps tangent direction continuous at each hit boundary and bends between hits', () => {
+test('Closing triples stack earlier notes above the slider heads', () => {
   const timeline = timelineFixture();
-  const boundaries = [...timeline.circles.map(point => point.hit), timeline.slider.start, timeline.slider.end, timeline.final.hit];
-  const epsilon = 0.05;
+  for (const time of [26906, 29432]) {
+    const index = timeline.objects.findIndex(point => point.time === time);
+    assert.deepEqual(Array.from(timeline.objects.slice(index - 2, index + 1), point => point.stack), [2, 1, 0]);
+  }
+});
+
+test('Cursor position and tangent stay continuous at every hit and slider boundary', () => {
+  const timeline = timelineFixture();
+  const boundaries = timeline.objects.flatMap(point => point.path ? [point.hit, point.end] : [point.hit]);
+  const epsilon = .001;
   for (const time of boundaries) {
     const before = timeline.cursorAt(time - epsilon), at = timeline.cursorAt(time), after = timeline.cursorAt(time + epsilon);
-    const left = { x: (at.x - before.x) / epsilon, y: (at.y - before.y) / epsilon };
-    const right = { x: (after.x - at.x) / epsilon, y: (after.y - at.y) / epsilon };
-    assert.ok(Math.hypot(left.x - right.x, left.y - right.y) < 0.03, `tangent discontinuity at ${time}ms`);
+    assert.ok(Math.hypot(before.x - at.x, before.y - at.y) < .02);
+    assert.ok(Math.hypot(after.x - at.x, after.y - at.y) < .02);
+    assert.ok(Math.hypot((at.x - before.x - after.x + at.x) / epsilon, (at.y - before.y - after.y + at.y) / epsilon) < .01);
   }
-  const start = timeline.cursorAt(120), end = timeline.cursorAt(620), middle = timeline.cursorAt(370);
-  const linearMiddle = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-  assert.ok(Math.hypot(middle.x - linearMiddle.x, middle.y - linearMiddle.y) > 5);
+  assert.deepEqual(timeline.cursorAt(-100), timeline.cursorAt(0));
+  assert.deepEqual(timeline.cursorAt(starsEnd), timeline.final);
+});
+
+test('Danser cursor bows between jumps, keeps tight stacks compact, and stays inside the fitted field', () => {
+  const timeline = timelineFixture();
+  let jumps = 0, dances = 0;
+  for (let index = 1; index < timeline.objects.length; index++) {
+    const previous = timeline.objects[index - 1], next = timeline.objects[index];
+    const from = previous.path ? previous.path.at(1) : previous;
+    const dx = next.x - from.x, dy = next.y - from.y;
+    const distance = Math.hypot(dx, dy);
+    const middle = timeline.cursorAt((previous.end + next.hit) / 2);
+    if (distance > 150) {
+      jumps++;
+      const deviation = Math.abs(dx * (middle.y - from.y) - dy * (middle.x - from.x)) / distance;
+      if (deviation > 10) dances++;
+    } else if (distance < 10) {
+      assert.ok(Math.hypot(middle.x - from.x, middle.y - from.y) < 30, 'stacked taps avoid wide loops');
+    }
+  }
+  assert.ok(jumps > 10 && dances >= jumps * .8, 'most long jumps take a visible curved sweep');
+  const padding = timeline.diameter * 2.15 / 2;
+  for (let time = 0; time <= finalHit; time += 2) {
+    const cursor = timeline.cursorAt(time);
+    assert.ok(Math.abs(cursor.x) < 256 + padding && Math.abs(cursor.y) < 192 + padding, 'dance remains within the fitted playfield');
+  }
+});
+
+test('Full-map no-mod SS carries 159x into the excerpt and finishes at 192x with stable slider scoring', () => {
+  const timeline = timelineFixture();
+  const ss = timeline.beatmap.ss;
+  assert.equal(ss.initial.combo, 159);
+  assert.equal(ss.initial.score, 668810);
+  assert.equal(ss.maxCombo, 192);
+  assert.equal(ss.finalScore, 968510);
+  assert.equal(timeline.events.at(-1).combo, 192);
+  assert.equal(timeline.events.at(-1).score, 968510);
+  assert.equal(timeline.events.filter(event => event.key !== undefined).length, 28);
+  assert.equal(timeline.events.filter(event => event.kind === 'tail').length, 5);
+  assert.equal(timeline.events.filter(event => event.kind === 'judgement').length, 5);
+  let combo = ss.initial.combo, score = ss.initial.score;
+  for (const event of timeline.events) {
+    score += event.judgement ? 300 + Math.max(0, combo - 1) * 60 : event.value;
+    combo += event.comboDelta;
+    assert.equal(event.score, score);
+    assert.equal(event.combo, combo);
+  }
+  for (const slider of timeline.sliders) {
+    const tail = timeline.events.find(event => event.kind === 'tail' && Math.abs(event.time - (slider.end - 36)) < 1e-6);
+    const result = timeline.events.find(event => event.kind === 'judgement' && Math.abs(event.time - slider.end) < 1e-6);
+    assert.equal(tail.value, 30);
+    assert.equal(result.comboDelta, 0, 'whole-slider judgement must not add a second tail combo');
+  }
 });
 
 function bootFixture({
@@ -261,55 +334,72 @@ function burstFrame(fixture, timestamp) {
   }));
 }
 
-test('WhiteCat HUD tracks hits, slider hold, and topples backward on the final note', () => {
+test('WhiteCat HUD follows every note and slider hold, then hinges away on the final beat', () => {
   const fixture = runtimeFixture();
+  const timeline = timelineFixture();
   const nodes = descendants(fixture.field);
   const byClass = name => nodes.find(node => node.className?.split(' ').includes(name));
   const value = name => byClass(name).getAttribute('data-value');
   const keys = nodes.filter(node => node.className === 'intro-hud-key');
   const boards = nodes.filter(node => node.className?.split(' ').includes('intro-hud-board'));
   runFrame(fixture, 0);
-  assert.equal(value('intro-hud-score-value'), '00000000');
-  assert.equal(value('intro-hud-combo-value'), '0x');
-  runFrame(fixture, 650);
-  assert.equal(value('intro-hud-combo-value'), '1x');
-  assert.equal(keys[0].getAttribute('data-down'), 'true');
-  runFrame(fixture, 1900);
-  assert.equal(value('intro-hud-combo-value'), '4x');
-  assert.equal(keys[1].getAttribute('data-down'), 'true');
-  runFrame(fixture, 2200);
-  assert.equal(value('intro-hud-combo-value'), '5x');
-  assert.equal(keys[1].getAttribute('data-down'), 'true', 'slider holds K2');
-  runFrame(fixture, 2500);
-  assert.equal(keys[1].getAttribute('data-down'), 'false');
-  assert.equal(value('intro-hud-score-value'), '00001042');
-  assert.ok(boards.every(node => /rotate[XY]\(0deg\)/.test(node.style.transform)));
-  runFrame(fixture, 2820);
-  assert.equal(value('intro-hud-combo-value'), '7x');
-  assert.equal(keys[0].getAttribute('data-down'), 'true');
-  runFrame(fixture, 3000);
-  assert.equal(value('intro-hud-score-value'), '00001558');
+  assert.equal(value('intro-hud-score-value'), '00668810');
+  assert.equal(value('intro-hud-combo-value'), '159x');
+  assert.equal(value('intro-hud-accuracy'), '100.00%');
+  assert.deepEqual(keys.map(key => key.children.find(node => node.className === 'intro-hud-key-count').textContent), ['60', '59', '0', '0']);
+  for (const point of timeline.objects) {
+    runFrame(fixture, point.hit);
+    assert.equal(value('intro-hud-combo-value'), `${timeline.events.filter(event => event.time <= point.hit).at(-1).combo}x`);
+    assert.equal(keys[point.key].getAttribute('data-down'), 'true');
+    if (point.path) {
+      runFrame(fixture, point.hit + point.duration - 10);
+      assert.equal(keys[point.key].getAttribute('data-down'), 'true', 'slider stays held until its actual tail');
+    }
+  }
+  runFrame(fixture, finalHit + 180);
+  assert.equal(Number(value('intro-hud-score-value')), timeline.events.at(-1).score);
+  assert.equal(value('intro-hud-combo-value'), '192x');
+  assert.equal(value('intro-hud-accuracy'), '100.00%');
   assert.match(byClass('intro-hud-score').style.transform, /rotateX\(-[\d.]+deg\)/);
   assert.match(byClass('intro-hud-keys').style.transform, /rotateY\(-[\d.]+deg\)/);
   assert.match(byClass('intro-hud-combo').style.transform, /rotateX\([\d.]+deg\)/);
-  runFrame(fixture, 3400);
+  runFrame(fixture, finalHit + 580);
   assert.ok(boards.every(node => node.style.opacity === '0'));
   fixture.intro.finish();
   assert.equal(fixture.field.removed, true);
 });
 
+test('Menu logo stays hidden during the off-centre final note and grows from the centre on that beat', () => {
+  const fixture = runtimeFixture();
+  const timeline = timelineFixture();
+  assert.notEqual(timeline.final.x, 0);
+  assert.notEqual(timeline.final.y, 0);
+  runFrame(fixture, 0);
+  runFrame(fixture, finalHit - 100);
+  assert.equal(fixture.values.get('--intro-logo-opacity'), '0');
+  runFrame(fixture, finalHit);
+  assert.equal(fixture.values.get('--intro-logo-opacity'), '0');
+  runFrame(fixture, finalHit + 100);
+  assert.equal(fixture.values.get('--intro-logo-opacity'), '1');
+  assert.ok(Number(fixture.values.get('--intro-logo-scale')) < 1);
+  runFrame(fixture, finalHit + 680);
+  assert.equal(fixture.values.get('--intro-logo-scale'), '1');
+  assert.ok(!fixture.writes.some(([name]) => /--intro-logo-[xy]/.test(name)));
+  fixture.intro.finish();
+});
+
 test('Background stays black through gameplay and fades in with the menu', () => {
   const fixture = runtimeFixture();
   runFrame(fixture, 0);
-  runFrame(fixture, 2820);
+  runFrame(fixture, finalHit);
   assert.equal(fixture.values.get('--intro-background'), '0');
-  runFrame(fixture, 3100);
+  runFrame(fixture, finalHit + 280);
   assert.equal(fixture.values.get('--intro-background'), '0');
-  runFrame(fixture, 3300);
+  runFrame(fixture, finalHit + 480);
   const opacity = Number(fixture.values.get('--intro-background'));
   assert.ok(opacity > 0 && opacity < 1);
   assert.equal(fixture.values.get('--intro-background'), fixture.values.get('--intro-profile'));
-  runFrame(fixture, 3830);
+  runFrame(fixture, finalHit + 1010);
   assert.equal(fixture.values.get('--intro-background'), '1');
   fixture.intro.finish();
   assert.equal(fixture.values.has('--intro-background'), false);
@@ -320,18 +410,18 @@ test('Final hit flashes softly and sends varied stars inward from both lower edg
     const fixture = runtimeFixture(viewport);
     const starCount = viewport.width < 600 ? 72 : 120;
     runFrame(fixture, 0);
-    assert.equal(burstFrame(fixture, 2819).length, 0);
+    assert.equal(burstFrame(fixture, finalHit - 1).length, 0);
     assert.equal(fixture.canvas.context.fills.length, 0);
-    burstFrame(fixture, 2865);
+    burstFrame(fixture, finalHit + 45);
     assert.equal(fixture.canvas.context.fills[0].opacity, .22);
     const emitted = [];
-    for (const time of [2920, 3020, 3120, 3220]) {
+    for (const time of [finalHit + 100, finalHit + 200, finalHit + 300, finalHit + 400]) {
       emitted.push(burstFrame(fixture, time).length);
     }
     const batches = emitted.map((count, index) => count - (emitted[index - 1] ?? 0));
     // Some small-screen stars are still outside the viewport immediately after launch.
     assert.ok(emitted[1] > emitted[3] - emitted[1] && batches[1] > batches[2] && batches[2] > batches[3], 'visible emission should taper after the stars enter the viewport');
-    const stars = burstFrame(fixture, 3500);
+    const stars = burstFrame(fixture, finalHit + 680);
     assert.equal(stars.length, starCount);
     assert.ok(new Set(stars.map(star => star.opacity)).size > 10);
     assert.ok(new Set(stars.map(star => star.width)).size > 10);
@@ -339,17 +429,17 @@ test('Final hit flashes softly and sends varied stars inward from both lower edg
     assert.ok(left.every(star => star.x < viewport.width / 2));
     assert.ok(right.every(star => star.x > viewport.width / 2));
     assert.ok(stars.every(star => star.y < viewport.height));
-    assert.ok(burstFrame(fixture, 3830).length > 0);
+    assert.ok(burstFrame(fixture, finalHit + 1010).length > 0);
     assert.equal(fixture.canvas.context.fills.length, 0);
-    runFrame(fixture, 3860);
+    runFrame(fixture, introEnd);
     assert.equal(fixture.intro.active, false);
     assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
-    const falling = burstFrame(fixture, 4300);
-    const fallen = burstFrame(fixture, 4450);
+    const falling = burstFrame(fixture, finalHit + 1480);
+    const fallen = burstFrame(fixture, finalHit + 1630);
     assert.ok(fallen.some(star => star.x > 0 && star.x < viewport.width * .025), 'falling stars should reach the left edge');
     assert.ok(fallen.some(star => star.x < viewport.width && star.x > viewport.width * .975), 'falling stars should reach the right edge');
     assert.ok(fallen.reduce((sum, star) => sum + star.y, 0) / fallen.length > falling.reduce((sum, star) => sum + star.y, 0) / falling.length, 'stars should fall downward under gravity');
-    runFrame(fixture, 5320);
+    runFrame(fixture, starsEnd);
     assert.equal(fixture.field.removed, true);
     assert.equal(fixture.canvas.width, 0);
     assert.equal(fixture.atlas.width, 0);
@@ -371,8 +461,8 @@ test('Modest hardware and slow frame cadence use fewer stars without narrowing t
     const fixture = runtimeFixture({ ...options, dpr: 3 });
     const initialSize = [fixture.canvas.width, fixture.canvas.height];
     runFrame(fixture, 0);
-    if (options.slow) for (let time = 33; time < 2820; time += 33) runFrame(fixture, time);
-    const stars = burstFrame(fixture, 3500);
+    if (options.slow) for (let time = 33; time < finalHit; time += 33) runFrame(fixture, time);
+    const stars = burstFrame(fixture, finalHit + 680);
     assert.equal(stars.length, options.width ? 48 : 72);
     assert.ok(fixture.canvas.width * fixture.canvas.height <= (options.slow ? 2000000 : 1000000));
     assert.deepEqual([fixture.canvas.width, fixture.canvas.height], initialSize, 'quality adaptation must not reallocate the visible canvas');
@@ -392,10 +482,10 @@ test('Star tail reuses cached sprites without DOM writes or fresh paths', () => 
   runFrame(fixture, 0);
   runFrame(fixture, 2600);
   assert.ok(paint.images.some(image => image.source.src?.includes('whitecat/')), 'gameplay uses the same canvas before the burst');
-  burstFrame(fixture, 3860); // interactive menu; only the star tail remains
+  burstFrame(fixture, introEnd); // interactive menu; only the star tail remains
   const writes = fixture.attributeWrites.length;
   const operations = paint.operations.length;
-  const stars = burstFrame(fixture, 4050);
+  const stars = burstFrame(fixture, introEnd + 190);
   assert.ok(stars.length > 0);
   assert.equal(fixture.attributeWrites.length, writes);
   assert.equal(fixture.atlas.context.operations.length, atlasOperations);
@@ -403,7 +493,7 @@ test('Star tail reuses cached sprites without DOM writes or fresh paths', () => 
   assert.equal(descendants(fixture.field).filter(node => node.tagName === 'polygon').length, 0);
   // Hidden tabs promptly release the tail and both backing stores.
   fixture.document.hidden = true;
-  runFrame(fixture, 4100);
+  runFrame(fixture, introEnd + 240);
   assert.equal(fixture.field.removed, true);
   assert.equal(fixture.canvas.width, 0);
   assert.equal(fixture.atlas.width, 0);
@@ -425,16 +515,16 @@ test('Runtime renders through the final cookie morph and restores inert state', 
   assert.ok(fixture.field);
   assert.ok(fixture.inertElements.every(element => element.inert));
   runFrame(fixture, 100); // establish the clock origin
-  runFrame(fixture, 3700); // elapsed 3600ms: the logo has reached its final pose
+  runFrame(fixture, finalHit + 880); // elapsed 3600ms: the logo has reached its final pose
   assert.equal(fixture.values.get('--intro-logo-scale'), '1');
   assert.equal(fixture.values.get('--intro-number'), '0');
   assert.equal(fixture.values.get('--intro-logo-opacity'), '1');
-  runFrame(fixture, 3960); // elapsed 3860ms
+  runFrame(fixture, introEnd + 100); // elapsed 3860ms
   assert.equal(fixture.intro.active, false);
   assert.ok(fixture.inertElements[0].inert);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
   assert.notEqual(fixture.field.removed, true);
-  runFrame(fixture, 5420); // remaining stars finish falling after the menu becomes interactive
+  runFrame(fixture, starsEnd + 100); // remaining stars finish falling after the menu becomes interactive
   assert.equal(fixture.field.removed, true);
   assert.equal([...fixture.style].some(key => key.startsWith('--intro-')), false);
   assert.deepEqual(fixture.warnings, []);
@@ -495,9 +585,9 @@ test('Boot eligibility honors session storage, deep links, replay, and productio
   assert.equal(bootFixture({ seen: true }).intro.active, false);
   assert.equal(bootFixture({ hash: '#about' }).intro.active, false);
   assert.equal(bootFixture({ search: '?intro=replay', seen: true }).intro.active, false);
-  const localReplay = bootFixture({ hostname: 'localhost', search: '?intro=replay&introAt=6000', seen: true });
+  const localReplay = bootFixture({ hostname: 'localhost', search: '?intro=replay&introAt=99999', seen: true });
   assert.equal(localReplay.intro.active, true);
-  assert.equal(localReplay.intro.reviewTime, 5320);
+  assert.equal(localReplay.intro.reviewTime, starsEnd);
   assert.equal(localReplay.timers.size, 1);
   assert.equal(bootFixture({ hostname: 'example.com', search: '?intro=replay' }).intro.active, true);
   assert.equal(bootFixture({ hostname: 'example.com', search: '?intro=replay', seen: true }).intro.active, false);
@@ -567,10 +657,10 @@ test('Background work waits for the falling-star tail, while skips settle immedi
 
   const runtime = runtimeFixture();
   runFrame(runtime, 0);
-  runFrame(runtime, 3860);
+  runFrame(runtime, introEnd);
   assert.equal(runtime.intro.active, false);
   assert.equal(runtime.intro.busy, true);
-  runFrame(runtime, 5320);
+  runFrame(runtime, starsEnd);
   assert.equal(runtime.intro.busy, false);
 });
 
@@ -582,7 +672,7 @@ test('Logo morph styles stay local and score updates use one glyph texture', () 
   assert.ok(digits.length > 0);
   assert.ok(digits.every(node => node.tagName === 'span' && node.src === undefined));
   assert.ok(digits.some(node => node.style.backgroundPosition === '-360px 0'), 'combo multiplier uses the x glyph');
-  runFrame(fixture, 3100);
+  runFrame(fixture, finalHit + 280);
   assert.ok(fixture.writes.length > 0);
   assert.ok(fixture.writes.every(([, , owner]) => owner !== fixture.root.style), 'no per-frame variable invalidates the whole site');
   assert.ok(!fixture.writes.some(([name]) => /--intro-(rim|fill)$/.test(name)), 'the morph does not repaint changing shadows or backgrounds');
@@ -633,7 +723,7 @@ test('Click is consumed while the intro is active; pagehide and hidden visibilit
 test('Watchdog finishes playback after the recovery deadline', () => {
   const fixture = bootFixture();
   const [id, timer] = [...fixture.timers.entries()][0];
-  assert.equal(timer.delay, 4800);
+  assert.equal(timer.delay, 9000);
   timer.fn();
   assert.equal(fixture.intro.active, false);
   assert.equal(fixture.timers.has(id), false);
@@ -651,34 +741,36 @@ test('Gameplay caps render work at 75 fps on a 240 Hz display without changing d
   runFrame(fixture, 1001);
   assert.equal(paint.operations.length, operations, 'intermediate refreshes do not render');
   assert.equal(fixture.writes.length, writes, 'intermediate refreshes do not update the logo');
-  runFrame(fixture, 3860);
+  runFrame(fixture, introEnd);
   assert.equal(fixture.intro.active, false, 'the last pose and release meet the elapsed-time deadline');
   assert.equal(descendants(fixture.field).filter(node => node.tagName === 'canvas').length, 1);
   assert.equal(descendants(fixture.field).some(node => node.tagName === 'g'), false);
   const tailStart = clears();
-  for (let frame = 1; frame <= 240; frame++) runFrame(fixture, 3860 + frame * 1000 / 240);
+  for (let frame = 1; frame <= 240; frame++) runFrame(fixture, introEnd + frame * 1000 / 240);
   assert.equal(clears() - tailStart, 50, 'star tail paints at 50 fps');
-  runFrame(fixture, 5320);
+  runFrame(fixture, starsEnd);
   assert.equal(fixture.frames.size, 0);
   assert.ok(fixture.canvases.every(canvas => canvas.width === 0 && canvas.height === 0), 'all backing stores are released');
   assert.deepEqual(fixture.warnings, []);
 });
 
-test('Gameplay rasterizes the slider once and skips completed hit objects', () => {
+test('Gameplay caches all five sliders once, culls expired notes, and releases every track', () => {
   const fixture = runtimeFixture();
+  const timeline = timelineFixture();
   const paint = fixture.canvas.context;
-  const slider = fixture.canvases.find(canvas => canvas !== fixture.canvas && canvas !== fixture.atlas);
-  const operations = slider.context.operations.length;
+  const tracks = fixture.canvases.filter(canvas => canvas !== fixture.canvas && canvas !== fixture.atlas);
+  assert.equal(tracks.length, 5);
+  const counts = tracks.map(track => track.context.operations.length);
   runFrame(fixture, 0);
-  burstFrame(fixture, 400);
-  assert.ok(paint.images.some(image => image.source.src?.endsWith('default-1@2x.png')));
-  burstFrame(fixture, 1900);
-  assert.ok(paint.images.some(image => image.source === slider), 'slider uses the cached raster');
-  assert.equal(slider.context.operations.length, operations);
-  assert.ok(!paint.images.some(image => /default-[123]@2x/.test(image.source.src)), 'expired circles are not drawn');
-  burstFrame(fixture, 3200);
+  for (const [index, slider] of timeline.sliders.entries()) {
+    burstFrame(fixture, slider.hit + slider.duration / 2);
+    assert.ok(paint.images.some(image => image.source === tracks[index]), 'uses its cached circular arc');
+    assert.equal(tracks[index].context.operations.length, counts[index]);
+  }
+  burstFrame(fixture, finalHit + 380);
   assert.ok(paint.images.every(image => image.source === fixture.atlas), 'only stars remain after gameplay disappears');
   fixture.intro.finish();
+  assert.ok(tracks.every(track => track.width === 0 && track.height === 0));
 });
 
 test('Stable gameplay does not rewrite logo styles or unchanged HUD values', () => {
@@ -713,7 +805,7 @@ test('Benchmarks report average fps and slowest-one-percent frame times accurate
 
 test('Local benchmarks measure painted frames in both phases and label interrupted runs', () => {
   const fixture = runtimeFixture({ benchmark: true });
-  for (let frame = 0; frame <= 550; frame++) {
+  for (let frame = 0; frame <= 850; frame++) {
     if (!fixture.frames.size) break;
     runFrame(fixture, frame * 10);
   }

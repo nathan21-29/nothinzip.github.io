@@ -21,7 +21,7 @@
     reduced: motionOff,
     benchmark: replay && params.get('introPerf') === '1' && !params.has('introAt'),
     // A local-only still frame is useful for reviewing timing at narrow sizes.
-    reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(5320, Number(params.get('introAt')) || 0)) : null,
+    reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(8122, Number(params.get('introAt')) || 0)) : null,
     onFinish(cleanup) { cleanups.push(cleanup); },
     settle() {
       if (!intro.busy) return;
@@ -72,5 +72,5 @@
   }, true);
   document.addEventListener('visibilitychange', () => { if (document.hidden) intro.finish(); });
   // No load event or asset promise gates playback. This is a recovery deadline only.
-  watchdog = setTimeout(intro.finish, 4800);
+  watchdog = setTimeout(intro.finish, 9000);
 })();
