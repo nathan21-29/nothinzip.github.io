@@ -824,6 +824,24 @@
   document.addEventListener('click', event => {
     const target = event.target.closest('button,a');
     if (!target) return;
+    if (target.hasAttribute('data-copy-email')) {
+      const email = 'n76chan@uwaterloo.ca';
+      navigator.clipboard.writeText(email).then(() => {
+        const feedback = document.querySelector('[data-copy-feedback]');
+        if (feedback) feedback.textContent = 'Email copied to clipboard';
+        target.setAttribute('aria-label', 'Email copied to clipboard');
+        target.title = 'Email copied';
+        window.setTimeout(() => {
+          if (!target.isConnected) return;
+          target.setAttribute('aria-label', 'Copy email address');
+          target.title = 'Copy email address';
+          if (feedback) feedback.textContent = '';
+        }, 1800);
+      }).catch(() => {
+        const feedback = document.querySelector('[data-copy-feedback]');
+        if (feedback) feedback.textContent = 'Could not copy email address';
+      });
+    }
     if (target.dataset.go) {
       if (target.tagName === 'A') {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
