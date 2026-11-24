@@ -53,16 +53,16 @@
     const lat = (14 + (targetLatitude - 14) * smooth(time / 1250)) * radians;
     const radius = 234 * (40 / radians / 234) ** zoom;
     const sinLon = Math.sin(lon), cosLon = Math.cos(lon), sinLat = Math.sin(lat), cosLat = Math.cos(lat);
-    const project = point => {
+    const project = (point, blend = 0) => {
       const deltaSin = point.sinLon * cosLon - point.cosLon * sinLon;
       const deltaCos = point.cosLon * cosLon + point.sinLon * sinLon;
-      let x = point.cosLat * deltaSin;
-      let y = cosLat * point.sinLat - sinLat * point.cosLat * deltaCos;
+      const x = point.cosLat * deltaSin;
+      const y = cosLat * point.sinLat - sinLat * point.cosLat * deltaCos;
       const z = sinLat * point.sinLat + cosLat * point.cosLat * deltaCos;
-      // Hidden portions of a clipped coastline travel along the globe's rim.
-      if (z < 0) { const length = Math.hypot(x, y) || 1; x /= length; y /= length; }
-      return { x: (320 + radius * x) * (1 - flatten) + (20 + (point.lon - 128) * 33) * flatten,
-        y: (335 - radius * y) * (1 - flatten) + (20 + (46 - point.lat) * 40) * flatten, visible: z >= 0 };
+      return { x: (320 + radius * x) * (1 - blend) + (20 + (point.lon - 128) * 33) * blend,
+        y: (335 - radius * y) * (1 - blend) + (20 + (46 - point.lat) * 40) * blend,
+        flatX: 20 + (point.lon - 128) * 33, flatY: 20 + (46 - point.lat) * 40,
+        sphereX: x, sphereY: y, z, visible: z >= 0 };
     };
     const ctx = context;
     ctx.clearRect(0, 0, 640, 670);
@@ -84,19 +84,61 @@
       }
       ctx.stroke();
     }
-    function paint(rings, fill) {
+    function paint(rings, fill, blend = 0) {
       ctx.fillStyle = fill;
       for (const ring of rings) {
-        const projected = ring.map(project);
+        const projected = ring.map(point => project(point, blend));
         if (!projected.some(point => point.visible)) continue;
+        // Clip at the horizon before filling. Projecting back-facing vertices
+        // onto the rim creates chords through the ocean near the back pole.
+        const clipped = [];
+        let exit = null;
+        const first = projected.findIndex(point => point.visible);
+        const crossing = (a, b) => {
+          const t = a.z / (a.z - b.z);
+          let x = a.sphereX + (b.sphereX - a.sphereX) * t;
+          let y = a.sphereY + (b.sphereY - a.sphereY) * t;
+          const length = Math.hypot(x, y);
+          x /= length; y /= length;
+          const flatX = a.flatX + (b.flatX - a.flatX) * t;
+          const flatY = a.flatY + (b.flatY - a.flatY) * t;
+          return { x: (320 + radius * x) * (1 - blend) + flatX * blend,
+            y: (335 - radius * y) * (1 - blend) + flatY * blend, flatX, flatY,
+            angle: Math.atan2(-y, x) };
+        };
+        for (let i = 0; i < projected.length; i++) {
+          const a = projected[(first + i) % projected.length];
+          const b = projected[(first + i + 1) % projected.length];
+          if (a.visible) clipped.push(a);
+          if (a.visible === b.visible) continue;
+          const edge = crossing(a, b);
+          if (a.visible) { clipped.push(edge); exit = edge; }
+          else if (exit) {
+            let sweep = edge.angle - exit.angle;
+            sweep = Math.atan2(Math.sin(sweep), Math.cos(sweep));
+            const steps = Math.max(1, Math.ceil(Math.abs(sweep) / (3 * radians)));
+            for (let j = 1; j < steps; j++) {
+              const t = j / steps, angle = exit.angle + sweep * t;
+              clipped.push({
+                x: (320 + radius * Math.cos(angle)) * (1 - blend) + (exit.flatX + (edge.flatX - exit.flatX) * t) * blend,
+                y: (335 + radius * Math.sin(angle)) * (1 - blend) + (exit.flatY + (edge.flatY - exit.flatY) * t) * blend
+              });
+            }
+            clipped.push(edge); exit = null;
+          }
+        }
         ctx.beginPath();
-        projected.forEach((point, i) => i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+        clipped.forEach((point, i) => i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
         ctx.closePath(); ctx.fill();
       }
     }
-    paint(land, '#a68aa5');
+    // World rings cross the date line and cannot morph into Japan's local
+    // longitude coordinates without sweeping huge filled polygons over Japan.
+    // Keep the world spherical and fade it away before the local map unfolds.
+    ctx.globalAlpha *= 1 - smooth((zoom - .2) / .25);
+    if (ctx.globalAlpha > 0) paint(land, '#a68aa5');
     ctx.globalAlpha = .82;
-    paint(japan, `rgb(${Math.round(237 - 39 * zoom)},${Math.round(145 + 37 * zoom)},${Math.round(188 + 11 * zoom)})`);
+    paint(japan, `rgb(${Math.round(237 - 39 * zoom)},${Math.round(145 + 37 * zoom)},${Math.round(188 + 11 * zoom)})`, flatten);
     ctx.restore();
     ctx.globalAlpha = (1 - zoom) * .7;
     ctx.strokeStyle = '#ed91bc'; ctx.lineWidth = 1.3;

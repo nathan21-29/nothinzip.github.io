@@ -11,8 +11,10 @@ function fixture({ width = 420, height = 440, available = true, dpr = 2 } = {}) 
   const map = { dataset: {}, getBoundingClientRect: () => ({ width, height }) };
   const pins = { inert: false };
   let paints = 0, nextFrame = 0;
+  const fills = [];
   const context = new Proxy({
-    clearRect() { paints++; },
+    clearRect() { paints++; fills.length = 0; },
+    fill() { fills.push({ color: this.fillStyle, alpha: this.globalAlpha }); },
     createRadialGradient() { return { addColorStop() {} }; }
   }, { get: (target, name) => target[name] ?? (() => {}) });
   const canvas = { hidden: true, width: 1, height: 1, getContext: () => available ? context : null };
@@ -26,7 +28,7 @@ function fixture({ width = 420, height = 440, available = true, dpr = 2 } = {}) 
   });
   vm.runInContext(data, scope);
   vm.runInContext(source, scope);
-  return { map, pins, canvas, document, frames, listeners, intro: window.PhotoMapIntro,
+  return { map, pins, canvas, document, frames, listeners, fills, intro: window.PhotoMapIntro,
     get paints() { return paints; },
     tick(time) { const queued = [...frames.values()]; frames.clear(); queued.forEach(fn => fn(time)); }
   };
@@ -53,6 +55,19 @@ test('Globe spins, zooms and hands the map back with no remaining render loop', 
   view.intro.setActive(false);
   view.intro.setActive(true);
   assert.equal(view.canvas.hidden, false, 'opening the gallery again replays the flight');
+});
+
+test('Surrounding continents fade out before the Japan projection unfolds', () => {
+  const view = fixture();
+  view.intro.setActive(true);
+  view.tick(0);
+  assert.ok(view.fills.some(fill => fill.color === '#a68aa5' && fill.alpha > 0));
+  // The globe-to-local-map blend starts at zoom=.45, about 1417ms.
+  for (let time = 1450; time <= 2050; time += 50) {
+    view.tick(time);
+    assert.ok(!view.fills.some(fill => fill.color === '#a68aa5'), `No world polygons during flattening at ${time}ms`);
+    assert.ok(view.fills.some(fill => fill.color.startsWith('rgb(')), 'Japan stays visible');
+  }
 });
 
 test('Globe caps paint work at 30 fps and bounds high-DPI backing dimensions', () => {

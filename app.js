@@ -603,6 +603,38 @@
   let imageViewerRequest = 0;
   let imageViewerItems = [];
   let imageViewerIndex = -1;
+  const viewerImageCache = new Map();
+  let imageViewerAnimations = [];
+  let imageViewerOutgoing = null;
+  let imageViewerQueuedDirection = 0;
+  function clearImageTransition() {
+    for (const animation of imageViewerAnimations) animation.cancel();
+    imageViewerAnimations = [];
+    imageViewerOutgoing?.remove();
+    imageViewerOutgoing = null;
+    imageViewerQueuedDirection = 0;
+  }
+  function loadViewerImage(src, priority = 'auto') {
+    if (viewerImageCache.has(src)) return viewerImageCache.get(src);
+    const image = new Image();
+    image.decoding = 'async';
+    image.fetchPriority = priority;
+    image.src = src;
+    const ready = image.decode().then(() => image).catch(error => {
+      if (viewerImageCache.get(src) === ready) viewerImageCache.delete(src);
+      throw error;
+    });
+    viewerImageCache.set(src, ready);
+    return ready;
+  }
+  function warmImageNeighbors() {
+    // Retain only the current image and its immediate neighbors. Originals can
+    // be large; keeping the entire collection decoded would exhaust tablet RAM.
+    const nearby = [0, -1, 1].map(offset => imageViewerItems[(imageViewerIndex + offset + imageViewerItems.length) % imageViewerItems.length])
+      .filter(Boolean).map(item => item.dataset.image);
+    for (const src of viewerImageCache.keys()) if (!nearby.includes(src)) viewerImageCache.delete(src);
+    for (const src of nearby) loadViewerImage(src, 'low').catch(() => {});
+  }
   function syncImageArrows() {
     const available = imageViewerItems.length > 1;
     $('#lightbox-previous').hidden = !available;
@@ -610,25 +642,44 @@
   }
   function stepImage(direction) {
     if (imageViewerItems.length < 2 || !$('#lightbox').open || closingDialogs.has($('#lightbox'))) return;
+    if (imageViewerAnimations.length) { imageViewerQueuedDirection = direction; return; }
     const next = (imageViewerIndex + direction + imageViewerItems.length) % imageViewerItems.length;
-    openImage(imageViewerItems[next], true);
+    openImage(imageViewerItems[next], true, direction);
   }
-  async function openImage(button, keepCollection = false) {
+  async function openImage(button, keepCollection = false, direction = 0) {
     if (!keepCollection) {
+      clearImageTransition();
       const cycle = button.closest('.photo-cycle');
       imageViewerItems = cycle ? [...$('#photo-roll').firstElementChild.querySelectorAll('[data-image]')] : [];
     }
     imageViewerIndex = imageViewerItems.findIndex(item => item.dataset.image === button.dataset.image);
     const request = ++imageViewerRequest;
-    resetProjectScroll();
-    const selectedImage = new Image();
-    selectedImage.src = button.dataset.image;
-    selectedImage.alt = button.dataset.imageAlt || '';
-    try { await selectedImage.decode(); }
+    if (!keepCollection) resetProjectScroll();
+    let selectedImage;
+    try { selectedImage = await loadViewerImage(button.dataset.image); }
     catch { return; }
+    selectedImage.alt = button.dataset.imageAlt || '';
     if (request !== imageViewerRequest || !button.isConnected) return;
+    const dialog = $('#lightbox');
+    const previousImage = $('#lightbox-image');
+    const slide = direction && dialog.open && state.motion && selectedImage !== previousImage;
+    previousImage.removeAttribute('id');
     selectedImage.id = 'lightbox-image';
-    $('#lightbox-image').replaceWith(selectedImage);
+    dialog.classList.toggle('is-photo-carousel', imageViewerItems.length > 0);
+    if (slide) {
+      imageViewerOutgoing = previousImage;
+      previousImage.setAttribute('aria-hidden', 'true');
+      previousImage.after(selectedImage);
+      selectedImage.removeAttribute('aria-hidden');
+      const timing = { duration: 300, easing: 'ease-in-out' };
+      imageViewerAnimations = [
+        previousImage.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${-direction * 100}%)` }], timing),
+        selectedImage.animate([{ transform: `translateX(${direction * 100}%)` }, { transform: 'translateX(0)' }], timing)
+      ];
+    } else {
+      selectedImage.removeAttribute('aria-hidden');
+      previousImage.replaceWith(selectedImage);
+    }
     $('#lightbox-caption').textContent = button.dataset.imageCaption || '';
     const note = $('#lightbox-note');
     note.textContent = button.dataset.imageNote || '';
@@ -637,13 +688,21 @@
     $('#lightbox-tags').innerHTML = tags.map(tag => `<span>${escape(tag)}</span>`).join('');
     $('#lightbox-tags').hidden = !tags.length;
     syncImageArrows();
-    if (!$('#lightbox').open) $('#lightbox').showModal();
+    if (!dialog.open) dialog.showModal();
+    warmImageNeighbors();
     queuePointerMotion();
+    if (slide) {
+      await Promise.allSettled(imageViewerAnimations.map(animation => animation.finished));
+      if (request !== imageViewerRequest) return;
+      const queued = imageViewerQueuedDirection;
+      clearImageTransition();
+      if (queued) stepImage(queued);
+    }
   }
 
   async function closeDialog(dialog) {
     if (!dialog.open || closingDialogs.has(dialog)) return;
-    if (dialog.id === 'lightbox') ++imageViewerRequest;
+    if (dialog.id === 'lightbox') { ++imageViewerRequest; clearImageTransition(); }
     closingDialogs.add(dialog);
     try {
       // Ease out toward the opening pose, starting from the currently visible position.
@@ -720,7 +779,10 @@
   $('#main-cookie').addEventListener('click', activateCookie);
   $('#lightbox-previous').addEventListener('click', () => stepImage(-1));
   $('#lightbox-next').addEventListener('click', () => stepImage(1));
-  $('#lightbox').addEventListener('close', () => { ++imageViewerRequest; imageViewerItems = []; imageViewerIndex = -1; });
+  $('#lightbox').addEventListener('close', () => {
+    ++imageViewerRequest; clearImageTransition(); viewerImageCache.clear();
+    imageViewerItems = []; imageViewerIndex = -1;
+  });
   function goBack() { navigate(state.screen === 'photography' ? photographyReturnScreen : 'home'); }
   $('#back-button').addEventListener('click', goBack);
   $('#motion-toggle').addEventListener('click', () => setMotion(!state.motion));
