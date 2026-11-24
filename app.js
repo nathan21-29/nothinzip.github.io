@@ -39,10 +39,44 @@
   const projectPageScroll = { position: 0, target: 0, velocity: 0, frame: 0, time: 0, edgeDelta: 0 };
   const background = document.createElement('div');
   background.className = 'site-background';
+  const landscapePhotos = (window.PHOTOGRAPHY_PHOTOS || []).filter(photo => photo.width > photo.height);
+  const previousBackground = readPreference('nathan-background-photo');
+  const backgroundChoices = landscapePhotos.filter(photo => photo.src !== previousBackground);
+  const backgroundPool = backgroundChoices.length ? backgroundChoices : landscapePhotos;
+  const backgroundPhoto = backgroundPool[Math.floor(Math.random() * backgroundPool.length)];
+  if (backgroundPhoto) {
+    background.style.backgroundImage = `url("${backgroundPhoto.preview || backgroundPhoto.src}")`;
+    savePreference('nathan-background-photo', backgroundPhoto.src);
+  }
   $('.world').prepend(background);
   const backdropLayers = [$('#world-image'), $('#world-image').cloneNode(false)];
   backdropLayers[1].removeAttribute('id');
   backdropLayers[0].after(backdropLayers[1]);
+
+  const credits = $('#acknowledgements');
+  const creditsToggle = $('#acknowledgements-toggle');
+  function setCreditsOpen(open, focus = false) {
+    credits.classList.toggle('is-expanded', open);
+    creditsToggle.setAttribute('aria-expanded', String(open));
+    $('#acknowledgements-content').inert = !open;
+    $('#acknowledgements-content').setAttribute('aria-hidden', String(!open));
+    if (focus) creditsToggle.focus({ preventScroll: true });
+  }
+  creditsToggle.addEventListener('click', () => setCreditsOpen(creditsToggle.getAttribute('aria-expanded') !== 'true'));
+  document.addEventListener('pointerdown', event => {
+    if (!credits.contains(event.target)) setCreditsOpen(false);
+  });
+  credits.addEventListener('focusout', event => {
+    if (!credits.contains(event.relatedTarget)) setCreditsOpen(false);
+  });
+
+  $('#restart-intro').addEventListener('click', () => {
+    try { sessionStorage.removeItem('nathan-intro-seen'); } catch { /* Playback also works without storage. */ }
+    const url = new URL(location.href);
+    for (const parameter of ['intro', 'introAt', 'introPerf']) url.searchParams.delete(parameter);
+    if (url.href !== location.href) location.replace(url.href);
+    else location.reload();
+  });
 
   function selectedProject() { return projects.find(project => project.id === state.selected) || projects[0]; }
   function visibleProjects() {
@@ -313,6 +347,7 @@
   }
 
   function applyScreen(screen, focus = true, animateFooter = false) {
+    setCreditsOpen(false);
     clearScreenExit();
     resetProjectScroll();
     state.screen = screen;
@@ -332,8 +367,8 @@
     window.PhotoGallery?.setActive(screen === 'photography');
     $('#back-button').hidden = screen === 'home';
     $('#signature').hidden = screen !== 'home';
+    $('#restart-intro').hidden = screen !== 'home';
     $('#project-toolbar').hidden = screen !== 'projects';
-    $('#launch-project').hidden = screen !== 'projects';
     $('#main-menu').inert = screen !== 'home' || !state.menuOpen;
     if (screen === 'projects') renderProjects();
     if (screen === 'home') toggleMenu(state.menuOpen);
@@ -539,8 +574,6 @@
       </article>`;
     }).join('') : '<div class="empty-state"><span>Nothing in this collection yet.</span><p>Try a different search or show all projects.</p><button id="clear-filters">Clear filters</button></div>';
     updatePreview(selectedProject());
-    $('#launch-project').setAttribute('aria-label', `Open ${selectedProject().title} case study`);
-    $('#launch-project').disabled = !list.length;
     $('#show-case-study').disabled = !list.length;
     $('#random-project').disabled = !list.length;
     updateBackdrop();
@@ -562,7 +595,6 @@
       entry.querySelector('.song-status').textContent = selected ? '●' : '';
     }
     updatePreview(selectedProject());
-    $('#launch-project').setAttribute('aria-label', `Open ${selectedProject().title} case study`);
     updateBackdrop();
     queuePointerMotion();
     if (focus) {
@@ -607,6 +639,42 @@
   let imageViewerAnimations = [];
   let imageViewerOutgoing = null;
   let imageViewerQueuedDirection = 0;
+  const IMAGE_CONTROLS_IDLE_DELAY = 2000;
+  const imageControlsPointerQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
+  let imageControlsIdleTimer = 0;
+  let imageControlsActiveAt = 0;
+  let imageControlsPointerPosition = null;
+  function resetImageControlsIdle() {
+    clearTimeout(imageControlsIdleTimer);
+    imageControlsIdleTimer = 0;
+    imageControlsPointerPosition = null;
+    $('#lightbox').classList.remove('is-controls-idle');
+  }
+  function hideIdleImageControls() {
+    imageControlsIdleTimer = 0;
+    const dialog = $('#lightbox');
+    if (!dialog.open || imageViewerItems.length < 2 || !imageControlsPointerQuery.matches) { resetImageControlsIdle(); return; }
+    const remaining = imageControlsActiveAt + IMAGE_CONTROLS_IDLE_DELAY - performance.now();
+    if (remaining > 0) {
+      imageControlsIdleTimer = setTimeout(hideIdleImageControls, remaining);
+      return;
+    }
+    dialog.classList.add('is-controls-idle');
+  }
+  function wakeImageControls(event) {
+    const dialog = $('#lightbox');
+    if (!dialog.open || imageViewerItems.length < 2) return;
+    if (event?.pointerType) {
+      if (event.pointerType !== 'mouse') { resetImageControlsIdle(); return; }
+      if (event.type === 'pointermove') {
+        if (imageControlsPointerPosition?.x === event.clientX && imageControlsPointerPosition?.y === event.clientY) return;
+        imageControlsPointerPosition = { x: event.clientX, y: event.clientY };
+      }
+    }
+    dialog.classList.remove('is-controls-idle');
+    imageControlsActiveAt = performance.now();
+    if (imageControlsPointerQuery.matches && !imageControlsIdleTimer) imageControlsIdleTimer = setTimeout(hideIdleImageControls, IMAGE_CONTROLS_IDLE_DELAY);
+  }
   function clearImageTransition() {
     for (const animation of imageViewerAnimations) animation.cancel();
     imageViewerAnimations = [];
@@ -689,6 +757,7 @@
     $('#lightbox-tags').hidden = !tags.length;
     syncImageArrows();
     if (!dialog.open) dialog.showModal();
+    if (!keepCollection) { resetImageControlsIdle(); wakeImageControls(); }
     warmImageNeighbors();
     queuePointerMotion();
     if (slide) {
@@ -702,7 +771,7 @@
 
   async function closeDialog(dialog) {
     if (!dialog.open || closingDialogs.has(dialog)) return;
-    if (dialog.id === 'lightbox') { ++imageViewerRequest; clearImageTransition(); }
+    if (dialog.id === 'lightbox') { ++imageViewerRequest; clearImageTransition(); resetImageControlsIdle(); }
     closingDialogs.add(dialog);
     try {
       // Ease out toward the opening pose, starting from the currently visible position.
@@ -779,7 +848,13 @@
   $('#main-cookie').addEventListener('click', activateCookie);
   $('#lightbox-previous').addEventListener('click', () => stepImage(-1));
   $('#lightbox-next').addEventListener('click', () => stepImage(1));
+  $('#lightbox').addEventListener('pointermove', wakeImageControls, { passive: true });
+  $('#lightbox').addEventListener('pointerdown', wakeImageControls, { passive: true });
+  $('#lightbox').addEventListener('keydown', () => wakeImageControls());
+  $('#lightbox').addEventListener('focusin', () => wakeImageControls());
+  imageControlsPointerQuery.addEventListener('change', resetImageControlsIdle);
   $('#lightbox').addEventListener('close', () => {
+    resetImageControlsIdle();
     ++imageViewerRequest; clearImageTransition(); viewerImageCache.clear();
     imageViewerItems = []; imageViewerIndex = -1;
   });
@@ -788,7 +863,6 @@
   $('#motion-toggle').addEventListener('click', () => setMotion(!state.motion));
   $('#random-project').addEventListener('click', randomProject);
   $('#show-case-study').addEventListener('click', () => openCaseStudy());
-  $('#launch-project').addEventListener('click', () => openCaseStudy());
   $('#project-search').addEventListener('input', event => { state.query = event.target.value; renderProjects(); });
   $('#project-sort').addEventListener('change', event => { state.sort = event.target.value; renderProjects(); });
   document.addEventListener('wheel', event => {
@@ -827,19 +901,22 @@
     if (target.hasAttribute('data-copy-email')) {
       const email = 'n76chan@uwaterloo.ca';
       navigator.clipboard.writeText(email).then(() => {
-        const feedback = document.querySelector('[data-copy-feedback]');
-        if (feedback) feedback.textContent = 'Email copied to clipboard';
+        const tooltip = $('#copy-tooltip');
+        tooltip.textContent = `${email} copied to clipboard`;
+        tooltip.classList.add('is-visible');
         target.setAttribute('aria-label', 'Email copied to clipboard');
         target.title = 'Email copied';
         window.setTimeout(() => {
           if (!target.isConnected) return;
           target.setAttribute('aria-label', 'Copy email address');
           target.title = 'Copy email address';
-          if (feedback) feedback.textContent = '';
+          tooltip.classList.remove('is-visible');
         }, 1800);
       }).catch(() => {
-        const feedback = document.querySelector('[data-copy-feedback]');
-        if (feedback) feedback.textContent = 'Could not copy email address';
+        const tooltip = $('#copy-tooltip');
+        tooltip.textContent = 'Could not copy email address';
+        tooltip.classList.add('is-visible');
+        window.setTimeout(() => tooltip.classList.remove('is-visible'), 1800);
       });
     }
     if (target.dataset.go) {
@@ -884,6 +961,11 @@
     if (event.ctrlKey || event.metaKey || event.altKey || $$('dialog[open]').length) return;
     const typing = event.target.closest('input,textarea,select,[contenteditable="true"]');
     if (event.key === 'Escape') {
+      if (creditsToggle.getAttribute('aria-expanded') === 'true') {
+        setCreditsOpen(false, true);
+        event.preventDefault();
+        return;
+      }
       if (state.screen === 'projects' && $('#project-search').value) {
         const search = $('#project-search');
         search.value = '';

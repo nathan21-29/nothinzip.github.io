@@ -17,7 +17,7 @@ function check(name, test) { test(); count++; console.log(`PASS ${name}`); }
 
 check('Application JavaScript parses', () => new vm.Script(app));
 check('Startup, cursor and photography JavaScript parse', () => {
-  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro-stars.js', 'intro-gameplay.js', 'intro-performance.js', 'intro.js', 'cursor.js', 'photography-data.js', 'photography-photos.js', 'photo-globe-data.js', 'photo-map-intro.js', 'photography.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
+  for (const file of ['intro-boot.js', 'intro-beatmap.js', 'intro-timeline.js', 'intro-hud.js', 'intro-stars.js', 'intro-gameplay.js', 'intro-performance.js', 'intro.js', 'cursor.js', 'photography-data.js', 'photography-photos.js', 'photo-globe-data.js', 'photo-map-intro.js', 'photography.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
 });
 const context = { window: {} };
 vm.createContext(context);
@@ -83,6 +83,7 @@ check('All stylesheet image assets exist', () => {
 });
 check('Startup skin assets exist', () => {
   for (const file of ['cursor-0.7x.png', 'cursortrail@2x.png', 'approachcircle@2x.png', 'hitcircleoverlay@2x.png']) assert.ok(existsSync(resolve(dist, 'assets/whitecat', file)), file);
+  for (let digit = 1; digit <= 9; digit++) assert.ok(existsSync(resolve(dist, 'assets/whitecat', `default-${digit}@2x.png`)));
 });
 check('WhiteCat gameplay HUD sprites exist', () => {
   const files = ['inputoverlay-background', 'inputoverlay-key', 'score-dot', 'score-percent', 'combo-x'];

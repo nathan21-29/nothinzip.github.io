@@ -9,6 +9,9 @@
   // Each snapshot stays at its original position; faster movement naturally leaves wider gaps.
   const SAMPLE_INTERVAL = 1000 / 30;
   const FADE_DURATION = 150;
+  const IDLE_DELAY = 15000;
+  const SHRINK_DURATION = 500;
+  const GROW_DURATION = 150;
   const TRAIL_SIZE = 64 * SIZE;
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
   const root = document.documentElement;
@@ -38,6 +41,10 @@
   let pressTransition = null;
   let cursorFrameIndex = -1;
   let paintedBounds = null;
+  let lastMovementTime = 0;
+  let idleTimer = 0;
+  let visibilityScale = 1;
+  let visibilityTransition = null;
 
   canvas.className = 'whitecat-trail';
   canvas.setAttribute('aria-hidden', 'true');
@@ -58,7 +65,35 @@
     lastPosition = null;
     lastSample = -Infinity;
     render(performance.now());
-    if (pressTransition) queueDraw();
+    if (pressTransition || visibilityTransition) queueDraw();
+  }
+
+  function currentVisibilityScale(time) {
+    if (!visibilityTransition) return visibilityScale;
+    const { from, to, start, duration } = visibilityTransition;
+    const progress = Math.min(1, Math.max(0, (time - start) / duration));
+    const eased = progress * progress * (3 - 2 * progress);
+    return from + (to - from) * eased;
+  }
+
+  function setCursorVisibility(scale, time) {
+    // Movement during a shrink reverses from the current size without restarting every mouse event.
+    if (visibilityScale === scale) return;
+    const from = currentVisibilityScale(time);
+    visibilityScale = scale;
+    visibilityTransition = from === scale ? null : { from, to: scale, start: time, duration: scale > from ? GROW_DURATION : SHRINK_DURATION };
+    if (!window.SiteIntro?.active) queueDraw();
+  }
+
+  function shrinkIdleCursor() {
+    idleTimer = 0;
+    if (!pointerPosition || document.hidden || !finePointer.matches) return;
+    const remaining = lastMovementTime + IDLE_DELAY - performance.now();
+    if (remaining > 0) {
+      idleTimer = setTimeout(shrinkIdleCursor, remaining);
+      return;
+    }
+    setCursorVisibility(0, lastMovementTime + IDLE_DELAY);
   }
 
   function applyCursorScale(scale) {
@@ -91,6 +126,10 @@
   }
 
   function resetPointer() {
+    clearTimeout(idleTimer);
+    idleTimer = 0;
+    visibilityScale = 1;
+    visibilityTransition = null;
     pointerPosition = null;
     pressed = false;
     pressTransition = null;
@@ -113,7 +152,7 @@
     // can hide the trail even when its visible control says "Motion on".
     enabled = imagesReady && finePointer.matches && !document.body.classList.contains('reduced-motion');
     root.classList.toggle('whitecat-cursor', imagesReady && finePointer.matches);
-    if (!finePointer.matches) pointerPosition = null;
+    if (!finePointer.matches) resetPointer();
     if (!enabled) {
       pressTransition = null;
       if (!finePointer.matches) pressed = false;
@@ -146,18 +185,19 @@
       paintedBounds = null;
     }
     if (window.SiteIntro?.active) return;
+    const scale = currentVisibilityScale(time);
     points = points.filter(point => time - point.time < FADE_DURATION);
     for (const point of points) {
       const age = Math.max(0, time - point.time) / FADE_DURATION;
       context.globalAlpha = .65 * (1 - age);
       // Draw independent, fixed-size sprites with normal blending, never a connecting path.
-      drawSprite(trailImage, point.x, point.y, TRAIL_SIZE);
+      if (scale > 0) drawSprite(trailImage, point.x, point.y, TRAIL_SIZE * scale);
     }
     context.globalAlpha = 1;
     if (imagesReady && finePointer.matches && pointerPosition) {
       const { image, size } = pressFrames[Math.max(0, cursorFrameIndex)];
       const sprite = image.complete && image.naturalWidth ? image : cursorImage;
-      drawSprite(sprite, pointerPosition.x, pointerPosition.y, size);
+      if (scale > 0) drawSprite(sprite, pointerPosition.x, pointerPosition.y, size * scale);
     }
   }
 
@@ -167,8 +207,9 @@
       applyCursorScale(currentPressScale(time));
       if (time - pressTransition.start >= PRESS_DURATION) pressTransition = null;
     }
+    if (visibilityTransition && time - visibilityTransition.start >= visibilityTransition.duration) visibilityTransition = null;
     render(time);
-    if (points.length || pressTransition) queueDraw();
+    if (points.length || pressTransition || visibilityTransition) queueDraw();
   }
 
   function queueDraw() {
@@ -177,16 +218,21 @@
   }
 
   document.addEventListener('pointermove', event => {
-    if (event.pointerType !== 'mouse') { pointerPosition = null; clearTrail(); return; }
+    if (event.pointerType !== 'mouse') { resetPointer(); return; }
     // Also recover if Mouse1 was released outside the window.
     if (typeof event.buttons === 'number' && imagesReady && finePointer.matches) setPressed(Boolean(event.buttons & 1));
     if (document.hidden || !imagesReady || !finePointer.matches) return;
     if (event.target.closest?.('input:not([type="button"]):not([type="submit"]), textarea, [contenteditable="true"]')) {
-      pointerPosition = null;
-      clearTrail();
+      resetPointer();
       return;
     }
     const time = performance.now();
+    if (!pointerPosition || pointerPosition.x !== event.clientX || pointerPosition.y !== event.clientY) {
+      lastMovementTime = time;
+      setCursorVisibility(1, time);
+      // One timeout checks the latest movement time; mouse polling never creates an idle render loop.
+      if (!idleTimer) idleTimer = setTimeout(shrinkIdleCursor, IDLE_DELAY);
+    }
     pointerPosition = { x: event.clientX, y: event.clientY };
     if (window.SiteIntro?.active) return;
     queueDraw();

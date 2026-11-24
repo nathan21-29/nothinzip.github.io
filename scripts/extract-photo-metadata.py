@@ -31,6 +31,6 @@ for path in sorted(root.rglob('*')):
         if focal:
             parts.append(f'{float(focal):g}mm')
         if parts:
-            metadata[path.relative_to(root).as_posix()] = ' || '.join(parts)
+            metadata[path.relative_to(root).as_posix()] = ' | '.join(parts)
 (root / 'camera-metadata.json').write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
 print(f'Exposure metadata found for {len(metadata)} photos.')

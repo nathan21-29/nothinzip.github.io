@@ -6,7 +6,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/hokkaido/IMG_0977.JPG",
     "caption": "",
     "alt": "Hokkaido photograph",
-    "camera": "ISO 500 || SS 1/250 || ƒ5.6 || 56mm",
+    "camera": "ISO 500 | SS 1/250 | ƒ5.6 | 56mm",
     "preview": "assets/photography-previews/hokkaido/IMG_0977.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -17,7 +17,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/hokkaido/IMG_0984.JPG",
     "caption": "",
     "alt": "Hokkaido photograph",
-    "camera": "ISO 400 || SS 1/1600 || ƒ2.8 || 56mm",
+    "camera": "ISO 400 | SS 1/1600 | ƒ2.8 | 56mm",
     "preview": "assets/photography-previews/hokkaido/IMG_0984.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -28,7 +28,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/hokkaido/IMG_0986.JPG",
     "caption": "",
     "alt": "Hokkaido photograph",
-    "camera": "ISO 125 || SS 1/1600 || ƒ2.8 || 56mm",
+    "camera": "ISO 125 | SS 1/1600 | ƒ2.8 | 56mm",
     "preview": "assets/photography-previews/hokkaido/IMG_0986.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -39,7 +39,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/hokkaido/IMG_0988.JPG",
     "caption": "",
     "alt": "Hokkaido photograph",
-    "camera": "ISO 110 || SS 1/4000 || ƒ1.8 || 56mm",
+    "camera": "ISO 110 | SS 1/4000 | ƒ1.8 | 56mm",
     "preview": "assets/photography-previews/hokkaido/IMG_0988.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -50,7 +50,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/hokkaido/IMG_0990.JPG",
     "caption": "",
     "alt": "Hokkaido photograph",
-    "camera": "ISO 140 || SS 1/4000 || ƒ2 || 56mm",
+    "camera": "ISO 140 | SS 1/4000 | ƒ2 | 56mm",
     "preview": "assets/photography-previews/hokkaido/IMG_0990.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -61,7 +61,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/gifu/IMG_0975.JPG",
     "caption": "",
     "alt": "Gifu photograph",
-    "camera": "ISO 220 || SS 1/2500 || ƒ2.8 || 56mm",
+    "camera": "ISO 220 | SS 1/2500 | ƒ2.8 | 56mm",
     "preview": "assets/photography-previews/gifu/IMG_0975.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -72,7 +72,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/gifu/IMG_0978.JPG",
     "caption": "",
     "alt": "Gifu photograph",
-    "camera": "ISO 110 || SS 1/4 || ƒ2 || 56mm",
+    "camera": "ISO 110 | SS 1/4 | ƒ2 | 56mm",
     "preview": "assets/photography-previews/gifu/IMG_0978.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -83,7 +83,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/gifu/IMG_0980.JPG",
     "caption": "",
     "alt": "Gifu photograph",
-    "camera": "ISO 220 || SS 1/2000 || ƒ4 || 56mm",
+    "camera": "ISO 220 | SS 1/2000 | ƒ4 | 56mm",
     "preview": "assets/photography-previews/gifu/IMG_0980.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -94,7 +94,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/gifu/IMG_0985.JPG",
     "caption": "",
     "alt": "Gifu photograph",
-    "camera": "ISO 125 || SS 1/800 || ƒ2 || 56mm",
+    "camera": "ISO 125 | SS 1/800 | ƒ2 | 56mm",
     "preview": "assets/photography-previews/gifu/IMG_0985.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -105,7 +105,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/gifu/IMG_0987.JPG",
     "caption": "",
     "alt": "Gifu photograph",
-    "camera": "ISO 100 || SS 1/4000 || ƒ2.8 || 56mm",
+    "camera": "ISO 100 | SS 1/4000 | ƒ2.8 | 56mm",
     "preview": "assets/photography-previews/gifu/IMG_0987.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -116,7 +116,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/gifu/_DSC7857-Enhanced-NR.jpg",
     "caption": "",
     "alt": "Gifu photograph",
-    "camera": "ISO 360 || SS 1/80 || ƒ1.6 || 56mm",
+    "camera": "ISO 360 | SS 1/80 | ƒ1.6 | 56mm",
     "preview": "assets/photography-previews/gifu/_DSC7857-Enhanced-NR.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -127,7 +127,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/ine/IMG_0979.JPG",
     "caption": "",
     "alt": "Ine photograph",
-    "camera": "ISO 180 || SS 1/1250 || ƒ3.2 || 56mm",
+    "camera": "ISO 180 | SS 1/1250 | ƒ3.2 | 56mm",
     "preview": "assets/photography-previews/ine/IMG_0979.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -138,7 +138,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/ine/IMG_0981.JPG",
     "caption": "",
     "alt": "Ine photograph",
-    "camera": "ISO 100 || SS 1/2000 || ƒ3.2 || 56mm",
+    "camera": "ISO 100 | SS 1/2000 | ƒ3.2 | 56mm",
     "preview": "assets/photography-previews/ine/IMG_0981.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -149,7 +149,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/ine/IMG_0982.JPG",
     "caption": "",
     "alt": "Ine photograph",
-    "camera": "ISO 100 || SS 1/4000 || ƒ2.8 || 56mm",
+    "camera": "ISO 100 | SS 1/4000 | ƒ2.8 | 56mm",
     "preview": "assets/photography-previews/ine/IMG_0982.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -160,7 +160,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/ine/IMG_0983.JPG",
     "caption": "",
     "alt": "Ine photograph",
-    "camera": "ISO 110 || SS 1/500 || ƒ7.1 || 24mm",
+    "camera": "ISO 110 | SS 1/500 | ƒ7.1 | 24mm",
     "preview": "assets/photography-previews/ine/IMG_0983.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -171,7 +171,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/ine/IMG_0991.JPG",
     "caption": "",
     "alt": "Ine photograph",
-    "camera": "ISO 110 || SS 1/2000 || ƒ2.8 || 56mm",
+    "camera": "ISO 110 | SS 1/2000 | ƒ2.8 | 56mm",
     "preview": "assets/photography-previews/ine/IMG_0991.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -182,7 +182,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/ine/_DSC8182.jpg",
     "caption": "",
     "alt": "Ine photograph",
-    "camera": "ISO 100 || SS 1/3200 || ƒ3.2 || 56mm",
+    "camera": "ISO 100 | SS 1/3200 | ƒ3.2 | 56mm",
     "preview": "assets/photography-previews/ine/_DSC8182.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -193,7 +193,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/nagoya/IMG_0976.JPG",
     "caption": "",
     "alt": "Nagoya photograph",
-    "camera": "ISO 500 || SS 1/250 || ƒ2.2 || 56mm",
+    "camera": "ISO 500 | SS 1/250 | ƒ2.2 | 56mm",
     "preview": "assets/photography-previews/nagoya/IMG_0976.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -204,7 +204,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/osaka/_DSC5419-Enhanced-NR.jpg",
     "caption": "",
     "alt": "Osaka photograph",
-    "camera": "ISO 560 || SS 1/50 || ƒ7.1 || 24mm",
+    "camera": "ISO 560 | SS 1/50 | ƒ7.1 | 24mm",
     "preview": "assets/photography-previews/osaka/_DSC5419-Enhanced-NR.jpg.webp",
     "width": 1600,
     "height": 1067
@@ -215,7 +215,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/osaka/_DSC5720-Enhanced-SR.jpg",
     "caption": "",
     "alt": "Osaka photograph",
-    "camera": "ISO 220 || SS 1/1000 || ƒ5 || 56mm",
+    "camera": "ISO 220 | SS 1/1000 | ƒ5 | 56mm",
     "preview": "assets/photography-previews/osaka/_DSC5720-Enhanced-SR.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -226,7 +226,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/osaka/_DSC5753.jpg",
     "caption": "",
     "alt": "Osaka photograph",
-    "camera": "ISO 220 || SS 1/320 || ƒ7.1 || 56mm",
+    "camera": "ISO 220 | SS 1/320 | ƒ7.1 | 56mm",
     "preview": "assets/photography-previews/osaka/_DSC5753.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -237,7 +237,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/osaka/_DSC5759.jpg",
     "caption": "",
     "alt": "Osaka photograph",
-    "camera": "ISO 125 || SS 1/320 || ƒ7.1 || 56mm",
+    "camera": "ISO 125 | SS 1/320 | ƒ7.1 | 56mm",
     "preview": "assets/photography-previews/osaka/_DSC5759.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -248,7 +248,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/tokyo/_DSC5712.jpg",
     "caption": "",
     "alt": "Tokyo photograph",
-    "camera": "ISO 100 || SS 1/4000 || ƒ2.2 || 24mm",
+    "camera": "ISO 100 | SS 1/4000 | ƒ2.2 | 24mm",
     "preview": "assets/photography-previews/tokyo/_DSC5712.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -259,7 +259,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/tokyo/_DSC6468.jpg",
     "caption": "",
     "alt": "Tokyo photograph",
-    "camera": "ISO 200 || SS 1/800 || ƒ6.3 || 24mm",
+    "camera": "ISO 200 | SS 1/800 | ƒ6.3 | 24mm",
     "preview": "assets/photography-previews/tokyo/_DSC6468.jpg.webp",
     "width": 1030,
     "height": 1600
@@ -270,7 +270,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/tokyo/_DSC6613.jpg",
     "caption": "",
     "alt": "Tokyo photograph",
-    "camera": "ISO 360 || SS 1/640 || ƒ8 || 24mm",
+    "camera": "ISO 360 | SS 1/640 | ƒ8 | 24mm",
     "preview": "assets/photography-previews/tokyo/_DSC6613.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -281,7 +281,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/tokyo/_DSC6623.jpg",
     "caption": "",
     "alt": "Tokyo photograph",
-    "camera": "ISO 180 || SS 1/640 || ƒ8 || 24mm",
+    "camera": "ISO 180 | SS 1/640 | ƒ8 | 24mm",
     "preview": "assets/photography-previews/tokyo/_DSC6623.jpg.webp",
     "width": 1600,
     "height": 1067
@@ -292,7 +292,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/tokyo/_DSC6733-Enhanced-NR.jpg",
     "caption": "",
     "alt": "Tokyo photograph",
-    "camera": "ISO 2200 || SS 1/200 || ƒ3.5 || 56mm",
+    "camera": "ISO 2200 | SS 1/200 | ƒ3.5 | 56mm",
     "preview": "assets/photography-previews/tokyo/_DSC6733-Enhanced-NR.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -303,7 +303,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/kyoto/IMG_0971.JPG",
     "caption": "",
     "alt": "Kyoto photograph",
-    "camera": "ISO 100 || SS 1/1600 || ƒ2 || 56mm",
+    "camera": "ISO 100 | SS 1/1600 | ƒ2 | 56mm",
     "preview": "assets/photography-previews/kyoto/IMG_0971.JPG.webp",
     "width": 1600,
     "height": 1067
@@ -314,7 +314,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/kyoto/_DSC5846.jpg",
     "caption": "",
     "alt": "Kyoto photograph",
-    "camera": "ISO 200 || SS 1/250 || ƒ2.5 || 56mm",
+    "camera": "ISO 200 | SS 1/250 | ƒ2.5 | 56mm",
     "preview": "assets/photography-previews/kyoto/_DSC5846.jpg.webp",
     "width": 1064,
     "height": 1600
@@ -325,7 +325,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/kyoto/_DSC6219.jpg",
     "caption": "",
     "alt": "Kyoto photograph",
-    "camera": "ISO 100 || SS 1/1600 || ƒ2 || 56mm",
+    "camera": "ISO 100 | SS 1/1600 | ƒ2 | 56mm",
     "preview": "assets/photography-previews/kyoto/_DSC6219.jpg.webp",
     "width": 1600,
     "height": 1067
@@ -336,7 +336,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/nara/_DSC5463.jpg",
     "caption": "",
     "alt": "Nara photograph",
-    "camera": "ISO 100 || SS 1/1250 || ƒ2.8 || 24mm",
+    "camera": "ISO 100 | SS 1/1250 | ƒ2.8 | 24mm",
     "preview": "assets/photography-previews/nara/_DSC5463.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -347,7 +347,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/nara/_DSC5634.jpg",
     "caption": "",
     "alt": "Nara photograph",
-    "camera": "ISO 280 || SS 1/2000 || ƒ4 || 56mm",
+    "camera": "ISO 280 | SS 1/2000 | ƒ4 | 56mm",
     "preview": "assets/photography-previews/nara/_DSC5634.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -358,7 +358,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/nara/_DSC5682.jpg",
     "caption": "",
     "alt": "Nara photograph",
-    "camera": "ISO 100 || SS 1/4000 || ƒ1.6 || 56mm",
+    "camera": "ISO 100 | SS 1/4000 | ƒ1.6 | 56mm",
     "preview": "assets/photography-previews/nara/_DSC5682.jpg.webp",
     "width": 1067,
     "height": 1600
@@ -369,7 +369,7 @@ window.PHOTOGRAPHY_PHOTOS = [
     "src": "assets/photography/nara/_DSC5685.jpg",
     "caption": "",
     "alt": "Nara photograph",
-    "camera": "ISO 100 || SS 1/4000 || ƒ1.6 || 56mm",
+    "camera": "ISO 100 | SS 1/4000 | ƒ1.6 | 56mm",
     "preview": "assets/photography-previews/nara/_DSC5685.jpg.webp",
     "width": 1067,
     "height": 1600

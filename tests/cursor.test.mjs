@@ -9,6 +9,8 @@ function fixture({ reduced = false, fine = true } = {}) {
   let now = 0;
   let nextFrame = 1;
   const frames = new Map();
+  let nextTimer = 1;
+  const timers = new Map();
   const paints = [];
   const clears = [];
   const events = () => ({
@@ -48,6 +50,8 @@ function fixture({ reduced = false, fine = true } = {}) {
     matchMedia: () => ({ ...events(), matches: fine }),
     MutationObserver: class { observe() {} },
     performance: { now: () => now },
+    setTimeout(fn, delay) { const id = nextTimer++; timers.set(id, { fn, at: now + delay }); return id; },
+    clearTimeout(id) { timers.delete(id); },
     requestAnimationFrame(fn) { const id = nextFrame++; frames.set(id, fn); return id; },
     cancelAnimationFrame(id) { frames.delete(id); }
   });
@@ -58,11 +62,14 @@ function fixture({ reduced = false, fine = true } = {}) {
   }
   function tick(time) {
     now = time;
+    for (const [id, timer] of [...timers]) {
+      if (timer.at <= now) { timers.delete(id); timer.fn(); }
+    }
     const pending = [...frames.values()];
     frames.clear();
     for (const fn of pending) fn(time);
   }
-  return { move, tick, frames, paints, clears, document, root, window };
+  return { move, tick, frames, timers, paints, clears, document, root, window };
 }
 
 const trails = view => view.paints.filter(paint => paint.src.endsWith('cursortrail@2x.png'));
@@ -159,4 +166,64 @@ test('Startup owns its cursor and regular drawing resumes when startup ends', ()
   view.window.SiteIntro.active = false;
   view.document.emit('site:intro-end');
   assert.equal(cursors(view).length, 1);
+});
+
+test('Cursor waits 15 seconds, shrinks for 500 ms, and stops rendering when hidden', () => {
+  const view = fixture();
+  view.move(0, 200);
+  view.tick(200);
+  view.tick(14999);
+  assert.equal(cursors(view).at(-1).rect[2], 90);
+  assert.equal(view.frames.size, 0, 'no continuous frames during the idle wait');
+  view.tick(15000);
+  assert.equal(cursors(view).at(-1).rect[2], 90);
+  view.tick(15250);
+  assert.equal(cursors(view).at(-1).rect[2], 45);
+  view.paints.length = 0;
+  view.tick(15500);
+  assert.equal(view.paints.length, 0);
+  assert.equal(view.frames.size, 0);
+  assert.equal(view.timers.size, 0);
+});
+
+test('Movement grows the hidden cursor and trail back over 150 ms without restarting the growth', () => {
+  const view = fixture();
+  view.move(0, 200); view.tick(200); view.tick(15500);
+  view.paints.length = 0;
+  view.move(16000, 250); view.tick(16000);
+  assert.equal(view.paints.length, 0, 'growth starts at zero size');
+  view.move(16025, 270); view.tick(16025);
+  assert.ok(trails(view).at(-1).rect[2] < 44.8, 'the trail grows with the cursor');
+  view.move(16075, 300); view.tick(16075);
+  assert.equal(cursors(view).at(-1).rect[2], 45);
+  view.move(16150, 350); view.tick(16150);
+  assert.equal(cursors(view).at(-1).rect[2], 90);
+  view.tick(16301);
+  assert.equal(view.frames.size, 0);
+});
+
+test('Movement partway through shrinking reverses smoothly from the current size', () => {
+  const view = fixture();
+  view.move(0, 200); view.tick(200); view.tick(15250);
+  assert.equal(cursors(view).at(-1).rect[2], 45);
+  view.move(15250, 250); view.tick(15250);
+  assert.equal(cursors(view).at(-1).rect[2], 45, 'no size jump at reversal');
+  view.tick(15325);
+  assert.equal(cursors(view).at(-1).rect[2], 67.5);
+  view.tick(15400);
+  assert.equal(cursors(view).at(-1).rect[2], 90);
+});
+
+test('Only real movement postpones hiding, and leaving cancels the idle timer', () => {
+  const view = fixture();
+  view.move(0, 200); view.tick(200);
+  view.move(10000, 250); view.tick(10200);
+  view.tick(15000);
+  assert.equal(view.frames.size, 0, 'the old deadline only reschedules a timeout');
+  view.move(24000, 250); view.tick(24000);
+  view.tick(25250);
+  assert.equal(cursors(view).at(-1).rect[2], 45, 'same-position events do not reset inactivity');
+  view.root.emit('pointerleave');
+  assert.equal(view.frames.size, 0);
+  assert.equal(view.timers.size, 0);
 });
