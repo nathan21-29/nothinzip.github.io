@@ -39,9 +39,11 @@
         boards.push({ node, delay, edge });
         return content;
       };
-      const number = (parent, prefix, length, className) => {
+      const number = (parent, length, className) => {
         const row = element('div', `intro-hud-number ${className}`, parent);
-        const digits = Array.from({ length }, () => sprite(`${prefix}-0`, 'intro-hud-digit', row));
+        // One decoded texture for every score/combo glyph; changing a digit never
+        // changes an image URL or introduces a first-use decode during a hit.
+        const digits = Array.from({ length }, () => element('span', 'intro-hud-digit', row));
         let previous;
         return value => {
           if (value === previous) return;
@@ -53,8 +55,8 @@
             if (before !== undefined && char === before[index]) continue;
             digits[index].style.display = char === undefined ? 'none' : '';
             if (char !== undefined) {
-              const name = char === '.' ? 'dot' : char === '%' ? 'percent' : char;
-              digits[index].src = `${skin}${prefix}-${name}@2x.png`;
+              const glyph = char === '.' ? 10 : char === '%' ? 11 : char === 'x' ? 12 : Number(char);
+              digits[index].style.backgroundPosition = `${-30 * glyph}px 0`;
               digits[index].style.width = char === '.' ? '20px' : '30px';
             }
           }
@@ -62,9 +64,9 @@
       };
 
       const score = board('score', 35, 'top');
-      const setScore = number(score, 'score', 8, 'intro-hud-score-value');
+      const setScore = number(score, 8, 'intro-hud-score-value');
       const statistics = element('div', 'intro-hud-statistics', score);
-      const setAccuracy = number(statistics, 'score', 7, 'intro-hud-accuracy');
+      const setAccuracy = number(statistics, 7, 'intro-hud-accuracy');
       const svgNS = 'http://www.w3.org/2000/svg';
       const progress = document.createElementNS(svgNS, 'svg');
       progress.setAttribute('class', 'intro-hud-progress');
@@ -82,7 +84,7 @@
       progressFill.setAttribute('class', 'intro-hud-progress-fill');
       progress.append(progressFill);
       const combo = board('combo', 65, 'bottom');
-      const setCombo = number(combo, 'combo', 4, 'intro-hud-combo-value');
+      const setCombo = number(combo, 4, 'intro-hud-combo-value');
       const keys = board('keys', 90, 'right');
       sprite('inputoverlay-background', 'intro-hud-keys-bg', keys);
       const keyRows = ['K1', 'K2', 'M1', 'M2'].map((label, index) => {
@@ -111,14 +113,15 @@
         dispose,
         draw(time) {
           if (finished) return;
-          const hits = events.filter(event => event.time <= time);
-          const last = hits.at(-1);
+          let hitCount = 0;
+          while (hitCount < events.length && events[hitCount].time <= time) hitCount++;
+          const last = events[hitCount - 1];
           const age = last ? time - last.time : Infinity;
           const hitPulse = 1 - timeline.clamp(age / 170);
-          const lastScore = hits.at(-2)?.score ?? 0;
+          const lastScore = events[hitCount - 2]?.score ?? 0;
           const animatedScore = Math.round(timeline.mix(lastScore, last?.score ?? 0, timeline.ease(age / 100)));
           setScore(String(animatedScore).padStart(8, '0'));
-          setCombo(`${hits.length}x`);
+          setCombo(`${hitCount}x`);
           style(combo, '--hud-combo-pulse', 1 + .12 * hitPulse);
           const songProgress = timeline.clamp(time / timeline.final.hit);
           const angle = Math.PI * 2 * songProgress;
@@ -128,10 +131,14 @@
           previousProgress = songProgress;
           keyRows.forEach((key, index) => {
             const { row, count } = key;
-            const presses = hits.filter(event => event.key === index);
-            if (key.presses !== presses.length) count.textContent = String(presses.length);
-            key.presses = presses.length;
-            const lastPress = presses.at(-1);
+            let presses = 0, lastPress;
+            for (let hit = 0; hit < hitCount; hit++) {
+              if (events[hit].key !== index) continue;
+              presses++;
+              lastPress = events[hit];
+            }
+            if (key.presses !== presses) count.textContent = String(presses);
+            key.presses = presses;
             const held = index === 1 && time >= timeline.slider.start && time < timeline.slider.end;
             const down = held || !!lastPress && time - lastPress.time < 95;
             if (key.down !== down) {
@@ -147,7 +154,6 @@
             const rotation = edge === 'right' ? `rotateY(${-angle}deg)` : `rotateX(${edge === 'top' ? -angle : angle}deg)`;
             style(node, 'transform', `perspective(700px) ${rotation}`);
             style(node, 'opacity', String(timeline.clamp(time / 180) * (1 - timeline.clamp((fall - .65) / .35))));
-            style(node, 'filter', `brightness(${1 - .5 * fall})`);
           }
           if (time >= timeline.final.hit + 570) dispose();
         }

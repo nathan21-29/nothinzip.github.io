@@ -14,6 +14,12 @@ body[data-screen="photography"] #main-content{height:100svh;min-height:0}
 .photo-map-stage{display:grid;flex:1;min-height:0;place-items:center;container-type:size}
 /* Match both available dimensions without stretching the coastline or its pins. */
 .photo-map{position:relative;width:min(100cqw,95.522cqh);height:auto;max-width:38rem;aspect-ratio:640/670;container-type:inline-size}
+.photo-globe{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.photo-map[data-globe-intro]>.photo-globe{opacity:1}
+.photo-map[data-globe-intro]>img,.photo-map[data-globe-intro]>.photo-map-pins,.photo-map[data-globe-intro]>svg{opacity:0}
+.photo-map[data-globe-intro="landing"]>.photo-globe{opacity:0;transition:opacity .3s ease-out}
+.photo-map[data-globe-intro="landing"]>img{opacity:.82;transition:opacity .3s ease-out}
+.photo-map[data-globe-intro="landing"]>.photo-map-pins,.photo-map[data-globe-intro="landing"]>svg{opacity:1;transition:opacity .3s ease-out}
 .photo-map img{display:block;width:100%;height:100%;opacity:.82;pointer-events:none}
 .photo-map svg,.photo-map-pins{position:absolute;inset:0;width:100%;height:100%}
 .photo-map svg{overflow:visible;pointer-events:none}

@@ -22,10 +22,32 @@ region folder, keyed by the relative filename (use `/` for subfolders):
 {
   "evening-in-ine.jpg": {
     "caption": "Evening on the water",
-    "alt": "Wooden boathouses reflecting in the calm water at Ine"
+    "alt": "Wooden boathouses reflecting in the calm water at Ine",
+    "note": "We arrived just before sunset. This was my favourite stop of the trip.",
+    "tags": ["sunset", "favourite"]
   }
 }
 ```
+
+`note` and `tags` are optional. Notes appear beneath the camera details when the
+photo is expanded; tags appear as small pink chips beneath the note. These are
+public photo annotations. Add entries only for photos you want to annotate.
+For example, create `assets/photography/hokkaido/captions.json` with:
+
+```json
+{
+  "IMG_0977.JPG": {
+    "note": "Write your memory or the story behind this photo here.",
+    "tags": ["favourite", "Hokkaido"]
+  }
+}
+```
+
+Run `npm run photos`, then commit the `captions.json` file and regenerated
+`photography-photos.js` to publish your edits. Edit `captions.json`, since the
+generated index is replaced when photos are indexed again. Expanded photos
+have left/right controls and keyboard arrow navigation through the current
+shuffled, filtered carousel, looping at its ends.
 
 Indexing includes all eight collections and ignores hidden files, hidden folders,
 and unsupported formats. Filenames containing spaces, Unicode, `#`, or `%` work.

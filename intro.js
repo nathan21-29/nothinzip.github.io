@@ -18,11 +18,26 @@
   let burstTail = false;
   let motionObserver;
   const properties = new Map();
+  // Inherited variables on :root invalidate styles throughout the entire site.
+  // Keep each changing value on the small subtree that actually consumes it.
+  const owners = new Map();
+  for (const [names, selector] of [
+    ['logo-scale logo-opacity', '.cookie-pulse'],
+    ['skin-opacity number', '#main-cookie'], ['depth', '.intro-logo-surface'],
+    ['facets', '.cookie-facets'], ['word word-scale', '.cookie-word'],
+    ['spectrum spectrum-scale', '.cookie-spectrum'], ['halo', '.cookie-halo'],
+    ['background', '.world, .bottom-bar'], ['profile profile-y', '.topbar'],
+    ['footer footer-y', '.bottom-bar > *'], ['hint', '.home-tip'],
+    ['ui-visibility', '.topbar, .bottom-bar > *, .home-tip']
+  ]) {
+    const elements = [...document.querySelectorAll(selector)];
+    for (const name of names.split(' ')) owners.set(name, elements);
+  }
   const set = (name, value) => {
     const text = String(value);
     if (properties.get(name) === text) return;
     properties.set(name, text);
-    root.style.setProperty('--intro-' + name, text);
+    for (const element of owners.get(name)) element.style.setProperty('--intro-' + name, text);
   };
   // Advance the paint deadline without catching up missed frames or speeding playback up.
   function shouldPaint(timestamp, interval) {
@@ -39,6 +54,8 @@
     hud?.dispose();
     starBurst?.dispose();
     field?.remove();
+    intro.effectsActive = false;
+    if (!intro.active) intro.settle();
     benchmark?.finish(status);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('hashchange', onHistoryChange);
@@ -49,7 +66,10 @@
     motionObserver?.disconnect();
     for (const [element, inert] of restores) element.inert = inert;
     // Restart at scale 1, the same pose as the end of the morph.
-    for (const property of [...root.style]) if (property.startsWith('--intro-')) root.style.removeProperty(property);
+    for (const name of properties.keys()) {
+      for (const element of owners.get(name)) element.style.removeProperty('--intro-' + name);
+    }
+    properties.clear();
   }
   intro.onFinish(release);
   function onResize() { clearField(); intro.finish(); }
@@ -69,8 +89,6 @@
     const scale = Math.max(.25, Math.min(1.12, (innerWidth - 28) / 570,
       (center.y - 24) / 205, (innerHeight - center.y - 42) / 240));
     const hitScale = T.diameter * scale / rect.width;
-    const rimWidth = parseFloat(getComputedStyle(root).fontSize) * .625;
-    set('logo-size', `${rect.width}px`);
     for (const element of document.querySelectorAll('.topbar, #main-content, .bottom-bar')) {
       restores.push([element, element.inert]);
       element.inert = true;
@@ -103,7 +121,7 @@
         if (p < 1 && !shouldPaint(time, frameInterval)) { frame = requestAnimationFrame(fade); return; }
         reveal(p, true);
         set('logo-opacity', p); set('word', 1); set('word-scale', 1);
-        set('facets', .7); set('depth', 1); set('fill', '#e66da6');
+        set('facets', .7); set('depth', 1);
         set('spectrum', p); set('spectrum-scale', 1); set('halo', p);
         if (p === 1) intro.finish();
         else frame = requestAnimationFrame(fade);
@@ -117,6 +135,7 @@
     field.setAttribute('aria-hidden', 'true');
     field.innerHTML = '<p class="intro-skip">Click or Enter to skip</p>';
     document.body.append(field);
+    intro.effectsActive = true;
     hud = window.IntroHUD.create(field, T, innerWidth, innerHeight);
     const skip = field.querySelector('.intro-skip');
     starBurst = window.IntroStars.create(field, T, innerWidth, innerHeight);
@@ -130,9 +149,6 @@
       set('logo-opacity', T.clamp((time - (T.final.hit - T.approach)) / T.fadeIn));
       set('skin-opacity', 1 - morph);
       set('number', 1 - T.clamp((time - T.final.hit) / 130));
-      // Compensate the early rim for scale, keeping its visible weight at 3px.
-      set('rim', `${T.mix(0, rimWidth, morph)}px`);
-      set('fill', `rgb(${T.mix(0, 230, morph)} ${T.mix(0, 109, morph)} ${T.mix(0, 166, morph)})`);
       set('facets', .7 * T.ease((time - 2920) / 440));
       set('word', T.ease((time - 3000) / 420));
       set('word-scale', T.mix(.88, 1, T.ease((time - 3000) / 500)));

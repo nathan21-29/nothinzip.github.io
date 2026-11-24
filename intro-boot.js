@@ -16,11 +16,18 @@
   let watchdog;
   const intro = window.SiteIntro = {
     active,
+    busy: active,
+    effectsActive: false,
     reduced: motionOff,
     benchmark: replay && params.get('introPerf') === '1' && !params.has('introAt'),
     // A local-only still frame is useful for reviewing timing at narrow sizes.
     reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(5320, Number(params.get('introAt')) || 0)) : null,
     onFinish(cleanup) { cleanups.push(cleanup); },
+    settle() {
+      if (!intro.busy) return;
+      intro.busy = false;
+      document.dispatchEvent(new Event('site:intro-idle'));
+    },
     finish() {
       if (!intro.active) return;
       intro.active = false;
@@ -31,6 +38,7 @@
       root.removeAttribute('data-intro');
       try { sessionStorage.setItem(key, '1'); } catch { /* Private/file browsing still works. */ }
       document.dispatchEvent(new Event('site:intro-end'));
+      if (!intro.effectsActive) intro.settle();
     }
   };
   if (!active) return;

@@ -47,13 +47,16 @@
     let started = false;
     let finished = false;
     let flashFinished = false;
+    let qualityChosen = lean;
 
-    function configure() {
+    function configure(resize = true) {
       // Cap both DPR and total pixels: a 4K/retina screen must not multiply the work.
       const pixelBudget = lean ? 1000000 : 2000000;
       const ratio = Math.min(window.devicePixelRatio || 1, lean ? 1 : 1.5, Math.sqrt(pixelBudget / (width * height)));
-      canvas.width = Math.max(1, Math.floor(width * ratio));
-      canvas.height = Math.max(1, Math.floor(height * ratio));
+      if (resize) {
+        canvas.width = Math.max(1, Math.floor(width * ratio));
+        canvas.height = Math.max(1, Math.floor(height * ratio));
+      }
       context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
       context.fillStyle = '#fff';
       const mobile = width < 600;
@@ -103,11 +106,16 @@
           frameSamples++;
         }
         previousTime = time;
-        if (hitAge < 0) return;
-        if (!lean && frameSamples >= 12 && frameAverage > 23) {
-          lean = true;
-          configure();
+        // Make the quality decision before the final-hit/morph/burst overlap.
+        // Never reallocate the visible backing store at the busiest instant.
+        if (!qualityChosen && time >= T.slider.start) {
+          qualityChosen = true;
+          if (frameSamples >= 12 && frameAverage > 23) {
+            lean = true;
+            configure(false);
+          }
         }
+        if (hitAge < 0) return;
         started = true;
       }
       if (time >= end) { dispose(); return; }

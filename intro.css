@@ -11,7 +11,11 @@ html[data-intro] .home-tip{opacity:var(--intro-hint,0);visibility:var(--intro-ui
 html[data-intro] .home-stage{translate:none;transition:none}
 html[data-intro] .home-screen{animation:none!important}
 html[data-intro] .cookie-pulse{animation:none;transform:scale(var(--intro-logo-scale,1));opacity:var(--intro-logo-opacity,0)}
-html[data-intro] .cookie{transform:translateZ(0);transition:none;background:var(--intro-fill,#c7568d);box-shadow:0 calc(.5625rem * var(--intro-depth,0)) 0 #a54379,0 calc(1.25rem * var(--intro-depth,0)) calc(3.125rem * var(--intro-depth,0)) #10071090,inset 0 0 0 var(--intro-rim,.625rem) #fff7fb}
+html[data-intro] .cookie{transform:translateZ(0);transition:none;background:#000;box-shadow:none}
+.intro-logo-surface{display:none}
+/* Paint the finished face/rim/shadow once, then composite its reveal. Changing a
+   blurred shadow and inset rim on every morph frame used to rerasterize the logo. */
+html[data-intro] .intro-logo-surface{display:block;position:absolute;inset:0;border-radius:50%;background:#e66da6;box-shadow:0 .5625rem 0 #a54379,0 1.25rem 3.125rem #10071090,inset 0 0 0 .625rem #fff7fb;opacity:var(--intro-depth,0);will-change:opacity;pointer-events:none}
 html[data-intro] .cookie-facets{opacity:var(--intro-facets,0)}
 html[data-intro] .cookie-word{opacity:var(--intro-word,0);transform:scale(var(--intro-word-scale,.88))}
 html[data-intro] #main-cookie::after{content:'';position:absolute;inset:0;background:url('assets/whitecat/default-5@2x.png') center/39.0625% 39.0625% no-repeat;opacity:var(--intro-number,0);pointer-events:none}
@@ -30,7 +34,7 @@ html[data-intro] .whitecat-trail{visibility:hidden}
 .intro-hud-score{top:0;right:12px;width:calc(180px * var(--hud-scale));height:calc(95px * var(--hud-scale));transform-origin:50% 0}
 .intro-hud-score .intro-hud-content{width:180px;padding-top:10px}
 .intro-hud-number{display:flex;align-items:center;justify-content:flex-end;height:40px}
-.intro-hud-digit{width:30px;height:40px;margin-left:-10px;object-fit:fill}
+.intro-hud-digit{display:block;flex:none;width:30px;height:40px;margin-left:-10px;background:url('assets/whitecat/intro-digits@2x.png') 0 0/390px 40px no-repeat}
 .intro-hud-statistics{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:4px}
 .intro-hud-accuracy{zoom:.75}
 .intro-playfield .intro-hud-progress{display:block;width:30px;height:30px;overflow:visible;flex:none;transform:rotate(-90deg)}

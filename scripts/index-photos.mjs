@@ -49,8 +49,9 @@ async function readCaptions(directory) {
   }
   for (const [filename, entry] of Object.entries(captions)) {
     if (!entry || Array.isArray(entry) || typeof entry !== 'object' ||
-        ['caption', 'alt'].some(key => entry[key] !== undefined && typeof entry[key] !== 'string')) {
-      throw new Error(`${file}: ${filename} must contain optional string caption and alt fields.`);
+        ['caption', 'alt', 'note'].some(key => entry[key] !== undefined && typeof entry[key] !== 'string') ||
+        (entry.tags !== undefined && (!Array.isArray(entry.tags) || entry.tags.some(tag => typeof tag !== 'string')))) {
+      throw new Error(`${file}: ${filename} must contain optional string caption, alt and note fields, and tags must be an array of strings.`);
     }
   }
   return captions;
@@ -85,6 +86,8 @@ export async function buildPhotoIndex(root = defaultRoot) {
         alt: captions[filename]?.alt || (caption ? `${caption} — ${cityName}` : `${cityName} photograph`)
       };
       if (cameraMetadata[`${city}/${filename}`]) photo.camera = cameraMetadata[`${city}/${filename}`];
+      if (captions[filename]?.note) photo.note = captions[filename].note;
+      if (captions[filename]?.tags?.length) photo.tags = captions[filename].tags;
       const previewPath = join(root, 'assets', 'photography-previews', city, `${filename}.webp`);
       try {
         if ((await stat(previewPath)).isFile()) {

@@ -10,7 +10,7 @@ const locations = [
   { id: 'nara', name: 'Nara', latitude: 35, longitude: 136, label: [335, 568] }
 ];
 const photos = Object.freeze([
-  { city: 'kyoto', src: '/kyoto/garden.jpg', preview: '/previews/garden.webp', width: 1600, height: 1067, alt: 'Temple garden', caption: 'Temple' },
+  { city: 'kyoto', src: '/kyoto/garden.jpg', preview: '/previews/garden.webp', width: 1600, height: 1067, alt: 'Temple garden', caption: 'Temple', note: 'Quiet <garden> & morning light', tags: ['favourite', '"Kyoto"'] },
   { city: 'ine', src: '/ine/boats.jpg', preview: '/previews/boats.webp', alt: 'Boats & "houses"', caption: 'Boathouses' },
   { city: 'kyoto', src: '/kyoto/river.jpg', alt: 'River at dusk', caption: 'River' }
 ].map(Object.freeze));
@@ -233,6 +233,8 @@ test('Opening the gallery shuffles the original collection and preserves card me
       assert.equal(preview.getAttribute('height'), String(photo.height));
     }
     assert.equal(card.dataset.imageAlt, photo.alt);
+    assert.equal(card.dataset.imageNote, photo.note || '');
+    assert.deepEqual(JSON.parse(card.dataset.imageTags), photo.tags || []);
     assert.ok(card.dataset.imageCaption.includes(photo.caption));
     assert.ok(card.dataset.imageCaption.includes(city.name));
   }

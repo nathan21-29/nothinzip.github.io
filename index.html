@@ -14,7 +14,8 @@
   <link rel="preload" href="assets/whitecat/approachcircle@2x.png" as="image">
   <link rel="preload" href="assets/whitecat/hitcircleoverlay@2x.png" as="image">
   <link rel="preload" href="assets/whitecat/inputoverlay-background@2x.png" as="image">
-  <link rel="preload" href="assets/whitecat/score-0@2x.png" as="image">
+  <link rel="preload" href="assets/whitecat/intro-digits@2x.png" as="image">
+  <link rel="preload" href="assets/whitecat/hitcircle@2x.png" as="image">
   <link rel="preload" href="assets/fonts/aller/Aller_Rg.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="photography.css">
@@ -23,6 +24,8 @@
   <script src="projects.js" defer></script>
   <script src="photography-data.js" defer></script>
   <script src="photography-photos.js" defer></script>
+  <script src="photo-globe-data.js" defer></script>
+  <script src="photo-map-intro.js" defer></script>
   <script src="photography.js" defer></script>
   <script src="spectrum.js" defer></script>
   <script src="app.js" defer></script>
@@ -60,6 +63,7 @@
         <nav class="main-menu" id="main-menu" aria-label="Explore portfolio" inert>
           <button class="menu-entry projects-entry" data-go="projects"><span class="menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H3v16h18V8H8Z"/><path d="M3 8h18M8 4v4"/></svg></span><span><strong>projects</strong><small>choose something I've built</small></span><kbd>P</kbd></button>
           <button class="menu-entry about-entry" data-go="about"><span class="menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><span><strong>about me</strong><small>the person behind the projects</small></span><kbd>A</kbd></button>
+          <button class="menu-entry photography-entry" data-go="photography"><span class="menu-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="4"/></svg></span><span><strong>photography</strong><small>a few places, through my lens</small></span><kbd>F</kbd></button>
         </nav>
         <div class="cookie-anchor spectrum-layer" aria-hidden="true">
           <div class="cookie-spectrum" id="cookie-spectrum" aria-hidden="true"></div>
@@ -68,6 +72,7 @@
           <div class="cookie-halo" aria-hidden="true"></div>
           <div class="cookie-pulse">
             <button class="cookie" id="main-cookie" aria-label="Open main menu" aria-expanded="false" aria-controls="main-menu">
+              <span class="intro-logo-surface" aria-hidden="true"></span>
               <span class="cookie-facets" aria-hidden="true"></span>
               <span class="cookie-word">nathan<span>!</span></span>
             </button>
@@ -92,7 +97,28 @@
     <section class="screen about-screen" id="about-screen" aria-labelledby="about-heading" hidden>
       <div class="about-layout">
         <div class="about-main"><span class="eyebrow">BEHIND THE PROJECTS</span><h1 id="about-heading">Hi, I'm Nathan<span>.</span></h1><p class="about-lead">A Computer Engineering student at the University of Waterloo who likes turning ideas into things that work.</p><p>Sometimes that's a rhythm game or a simulated stock market. Sometimes it's Formula 1 telemetry. Sometimes it's a crane made from popsicle sticks and a couple of servos.</p><p>I enjoy the whole process: figuring out the logic, building the interface, and working through the small problems that make the final result feel right.</p><div class="about-links"><a class="solid-link" href="mailto:n76chan@uwaterloo.ca">Say hello</a><a class="text-link" href="https://github.com/nathan21-29" target="_blank" rel="noreferrer">GitHub</a><a class="text-link" href="https://www.linkedin.com/in/nathansrmy" target="_blank" rel="noreferrer">LinkedIn</a></div></div>
-        <aside class="about-notes" aria-label="More about Nathan"><div class="about-monogram"><img src="assets/nathanphoto.jpg" alt="Nathan Chan"></div><section><span class="eyebrow">MY TOOLKIT</span><div class="skill-chips"><span>Java</span><span>C++</span><span>Python</span><span>JavaScript</span><span>Arduino</span><span>Git</span></div></section><section class="about-note"><span class="eyebrow">A LITTLE MORE HUMAN</span><p>Formula 1, photography, and learning Japanese. I like projects that give me a reason to learn something new.</p><a class="text-link photography-link" href="#photography" data-go="photography"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="4"/></svg>See my photography</a></section><section class="about-note"><span class="eyebrow">BEYOND BUILDING</span><p>I previously helped teach Chinese at the Mon Sheong Foundation, adapting explanations and supporting a class of 30+ students.</p></section></aside>
+        <aside class="about-notes" aria-label="More about Nathan">
+          <div class="about-monogram"><img src="assets/nathanphoto.jpg" alt="Nathan Chan"></div>
+          <section><span class="eyebrow">MY TOOLKIT</span><div class="skill-chips"><span>Java</span><span>C++</span><span>Python</span><span>JavaScript</span><span>Arduino</span><span>Git</span></div></section>
+          <section class="about-note human-note" id="human-note" data-human-state="idle" aria-label="A little more human">
+            <div class="human-reveal">
+            <button class="human-check" id="human-check" aria-controls="human-details" aria-expanded="false">
+              <span class="human-checkbox" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span>
+              <span id="human-check-label">Verify you're not a robot</span>
+              <span class="human-check-seal" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 8a8 8 0 0 0-14-1L3 10m0-6v6h6M5 16a8 8 0 0 0 14 1l2-3m0 6v-6h-6"/></svg></span>
+            </button>
+            <div class="human-copy">
+            <h2 class="eyebrow human-heading" id="human-heading" tabindex="-1" hidden>I'm not a robot either!</h2>
+            <span class="visually-hidden" id="human-status" role="status"></span>
+            <div class="human-details" id="human-details" inert aria-hidden="true"><div class="human-details-inner">
+              <p>Outside of my projects, I enjoy Formula 1, photography, and learning Japanese. There's always something new to learn.</p>
+            </div></div>
+            </div>
+            </div>
+            <a class="text-link photography-link" href="#photography" data-go="photography"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="4"/></svg>See my photography</a>
+          </section>
+          <section class="about-note"><span class="eyebrow">BEYOND BUILDING</span><p>I previously helped teach Chinese at the Mon Sheong Foundation, adapting explanations and supporting a class of 30+ students.</p></section>
+        </aside>
       </div>
     </section>
     <section class="screen photography-screen" id="photography-screen" aria-labelledby="photography-heading" hidden>
@@ -101,6 +127,7 @@
           <header class="photography-heading"><span class="eyebrow">THROUGH MY LENS</span><h1 id="photography-heading">Photography<span>.</span></h1><p>A few places I've been. Pick a dot to look around.</p></header>
           <div class="photo-map-stage">
             <div class="photo-map">
+              <canvas class="photo-globe" id="photo-globe" aria-hidden="true" hidden></canvas>
               <img src="assets/japan.svg" alt="Map of Japan's main islands" width="640" height="670">
               <svg viewBox="0 0 640 670" aria-hidden="true" id="photo-map-lines"></svg>
               <div class="photo-map-pins" id="photo-map-pins" role="group" aria-label="Photo locations"></div>
@@ -128,7 +155,12 @@
   </footer>
   <div class="transition-wipe" id="transition-wipe" aria-hidden="true"></div>
   <dialog class="case-study-dialog" id="case-study-dialog" aria-labelledby="case-study-title"><button class="dialog-close" data-close="case-study-dialog" aria-label="Close case study"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><div id="case-study-content"></div></dialog>
-  <dialog class="lightbox" id="lightbox" aria-label="Image viewer"><button class="dialog-close" data-close="lightbox" aria-label="Close image viewer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><figure><img id="lightbox-image" alt=""><figcaption id="lightbox-caption"></figcaption></figure></dialog>
+  <dialog class="lightbox" id="lightbox" aria-label="Image viewer">
+    <button class="dialog-close" data-close="lightbox" aria-label="Close image viewer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    <button class="lightbox-nav lightbox-previous" id="lightbox-previous" aria-label="Previous photo" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+    <button class="lightbox-nav lightbox-next" id="lightbox-next" aria-label="Next photo" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+    <figure><img id="lightbox-image" alt=""><figcaption><span id="lightbox-caption"></span><p class="lightbox-note" id="lightbox-note" hidden></p><span class="lightbox-tags" id="lightbox-tags" hidden></span></figcaption></figure>
+  </dialog>
   <noscript><div class="noscript-message">This portfolio's interactive menu needs JavaScript. You can still <a href="mailto:n76chan@uwaterloo.ca">email me</a>.</div></noscript>
 </body>
 </html>

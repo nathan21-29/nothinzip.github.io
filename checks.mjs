@@ -17,7 +17,7 @@ function check(name, test) { test(); count++; console.log(`PASS ${name}`); }
 
 check('Application JavaScript parses', () => new vm.Script(app));
 check('Startup, cursor and photography JavaScript parse', () => {
-  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro-stars.js', 'intro-gameplay.js', 'intro-performance.js', 'intro.js', 'cursor.js', 'photography-data.js', 'photography-photos.js', 'photography.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
+  for (const file of ['intro-boot.js', 'intro-timeline.js', 'intro-hud.js', 'intro-stars.js', 'intro-gameplay.js', 'intro-performance.js', 'intro.js', 'cursor.js', 'photography-data.js', 'photography-photos.js', 'photo-globe-data.js', 'photo-map-intro.js', 'photography.js']) new vm.Script(readFileSync(resolve(dist, file), 'utf8'), { filename: file });
 });
 const context = { window: {} };
 vm.createContext(context);
@@ -93,10 +93,10 @@ check('HTML IDs are unique', () => {
   const ids = Array.from(html.matchAll(/\bid="([^"]+)"/g), match => match[1]);
   assert.equal(new Set(ids).size, ids.length);
 });
-check('Main menu has the two requested destinations', () => {
+check('Main menu has projects, about and photography destinations', () => {
   const menu = html.match(/<nav class="main-menu"[\s\S]*?<\/nav>/)[0];
-  assert.equal((menu.match(/class="menu-entry /g) || []).length, 2);
-  assert.match(menu, /data-go="projects"/); assert.match(menu, /data-go="about"/);
+  assert.equal((menu.match(/class="menu-entry /g) || []).length, 3);
+  assert.match(menu, /data-go="projects"/); assert.match(menu, /data-go="about"/); assert.match(menu, /data-go="photography"/);
 });
 check('The menu pulse uses the one-second bouncy cycle', () => {
   assert.match(css, /animation:heartbeat\s+1s\s+linear\s+infinite/);

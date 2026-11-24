@@ -17,6 +17,7 @@
   };
   let navigationId = 0;
   let pendingScreen = null;
+  let photographyReturnScreen = 'about';
   let screenExitAnimations = [];
   let footerEntryAnimations = [];
   let previouslyFocused;
@@ -382,6 +383,7 @@
   function navigate(screen, { push = true } = {}) {
     if (!screenNames.includes(screen)) return;
     if (pendingScreen === screen) return;
+    if (screen === 'photography' && state.screen !== 'photography') photographyReturnScreen = state.screen === 'home' ? 'home' : 'about';
     if (screen === 'projects') preloadProjectImages();
     const id = ++navigationId;
     clearScreenExit();
@@ -599,7 +601,24 @@
   }
 
   let imageViewerRequest = 0;
-  async function openImage(button) {
+  let imageViewerItems = [];
+  let imageViewerIndex = -1;
+  function syncImageArrows() {
+    const available = imageViewerItems.length > 1;
+    $('#lightbox-previous').hidden = !available;
+    $('#lightbox-next').hidden = !available;
+  }
+  function stepImage(direction) {
+    if (imageViewerItems.length < 2 || !$('#lightbox').open || closingDialogs.has($('#lightbox'))) return;
+    const next = (imageViewerIndex + direction + imageViewerItems.length) % imageViewerItems.length;
+    openImage(imageViewerItems[next], true);
+  }
+  async function openImage(button, keepCollection = false) {
+    if (!keepCollection) {
+      const cycle = button.closest('.photo-cycle');
+      imageViewerItems = cycle ? [...$('#photo-roll').firstElementChild.querySelectorAll('[data-image]')] : [];
+    }
+    imageViewerIndex = imageViewerItems.findIndex(item => item.dataset.image === button.dataset.image);
     const request = ++imageViewerRequest;
     resetProjectScroll();
     const selectedImage = new Image();
@@ -611,12 +630,20 @@
     selectedImage.id = 'lightbox-image';
     $('#lightbox-image').replaceWith(selectedImage);
     $('#lightbox-caption').textContent = button.dataset.imageCaption || '';
+    const note = $('#lightbox-note');
+    note.textContent = button.dataset.imageNote || '';
+    note.hidden = !note.textContent;
+    const tags = JSON.parse(button.dataset.imageTags || '[]');
+    $('#lightbox-tags').innerHTML = tags.map(tag => `<span>${escape(tag)}</span>`).join('');
+    $('#lightbox-tags').hidden = !tags.length;
+    syncImageArrows();
     if (!$('#lightbox').open) $('#lightbox').showModal();
     queuePointerMotion();
   }
 
   async function closeDialog(dialog) {
     if (!dialog.open || closingDialogs.has(dialog)) return;
+    if (dialog.id === 'lightbox') ++imageViewerRequest;
     closingDialogs.add(dialog);
     try {
       // Ease out toward the opening pose, starting from the currently visible position.
@@ -652,8 +679,49 @@
     selectProject(pool[Math.floor(Math.random() * pool.length)].id, { focus: true });
   }
 
+  // A local CAPTCHA gag: no provider script or bot-verification service is needed.
+  $('#human-check').addEventListener('click', () => {
+    const note = $('#human-note');
+    if (note.dataset.humanState !== 'idle') return;
+    const button = $('#human-check');
+    button.style.minHeight = `${button.getBoundingClientRect().height}px`;
+    note.dataset.humanState = 'checking';
+    button.setAttribute('aria-disabled', 'true');
+    button.setAttribute('aria-busy', 'true');
+    $('#human-check-label').textContent = 'Verifying…';
+    $('#human-status').textContent = 'Verifying…';
+    setTimeout(() => {
+      note.dataset.humanState = 'checked';
+      button.removeAttribute('aria-busy');
+      $('#human-check-label').textContent = 'Verified';
+      setTimeout(() => {
+        const moveFocus = document.activeElement === button && state.screen === 'about';
+        button.setAttribute('aria-expanded', 'true');
+        note.dataset.humanState = 'fading';
+        setTimeout(() => {
+          const focusHeading = moveFocus && document.activeElement === button && state.screen === 'about';
+          // Keep the invisible checkbox in the shared grid cell to reserve its height.
+          button.inert = true;
+          button.setAttribute('aria-hidden', 'true');
+          $('#human-heading').hidden = false;
+          note.dataset.humanState = 'title';
+          $('#human-status').textContent = "I'm not a robot either!";
+          if (focusHeading) $('#human-heading').focus({ preventScroll: true });
+          setTimeout(() => {
+            $('#human-details').inert = false;
+            $('#human-details').removeAttribute('aria-hidden');
+            note.dataset.humanState = 'revealed';
+          }, state.motion ? 180 : 0);
+        }, state.motion ? 180 : 0);
+      }, 220);
+    }, 850);
+  });
+
   $('#main-cookie').addEventListener('click', activateCookie);
-  function goBack() { navigate(state.screen === 'photography' ? 'about' : 'home'); }
+  $('#lightbox-previous').addEventListener('click', () => stepImage(-1));
+  $('#lightbox-next').addEventListener('click', () => stepImage(1));
+  $('#lightbox').addEventListener('close', () => { ++imageViewerRequest; imageViewerItems = []; imageViewerIndex = -1; });
+  function goBack() { navigate(state.screen === 'photography' ? photographyReturnScreen : 'home'); }
   $('#back-button').addEventListener('click', goBack);
   $('#motion-toggle').addEventListener('click', () => setMotion(!state.motion));
   $('#random-project').addEventListener('click', randomProject);
@@ -728,6 +796,11 @@
 
   document.addEventListener('keydown', event => {
     stopProjectPageScroll();
+    if (!event.ctrlKey && !event.metaKey && !event.altKey && $('#lightbox').open && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      event.preventDefault();
+      stepImage(event.key === 'ArrowRight' ? 1 : -1);
+      return;
+    }
     if (event.ctrlKey || event.metaKey || event.altKey || $$('dialog[open]').length) return;
     const typing = event.target.closest('input,textarea,select,[contenteditable="true"]');
     if (event.key === 'Escape') {
@@ -745,6 +818,7 @@
     if (state.screen === 'home') {
       if (event.key.toLowerCase() === 'p') { event.preventDefault(); navigate('projects'); }
       if (event.key.toLowerCase() === 'a') { event.preventDefault(); navigate('about'); }
+      if (event.key.toLowerCase() === 'f') { event.preventDefault(); navigate('photography'); }
       if (event.key === 'Enter' && !event.target.closest('button,a')) { event.preventDefault(); if (!event.repeat) activateCookie(); }
       if (event.key === 'Enter' && event.repeat && event.target.closest('#main-cookie')) event.preventDefault();
     } else if (state.screen === 'projects') {
@@ -789,6 +863,11 @@
   const connection = navigator.connection;
   if (!connection?.saveData && !/^(slow-)?2g$/.test(connection?.effectiveType || '')) {
     const warmWhenIdle = () => {
+      // Downloads and image decoding must not compete with gameplay or its star tail.
+      if (window.SiteIntro?.busy) {
+        document.addEventListener('site:intro-idle', warmWhenIdle, { once: true });
+        return;
+      }
       if ('requestIdleCallback' in window) window.requestIdleCallback(preloadProjectImages, { timeout: 2000 });
       else setTimeout(preloadProjectImages, 1500);
     };

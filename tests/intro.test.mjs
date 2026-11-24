@@ -144,7 +144,7 @@ function runtimeFixture({
     }
   }
   const style = {
-    setProperty(key, value) { values.set(key, value); writes.push([key, value]); },
+    setProperty(key, value) { values.set(key, value); writes.push([key, value, this]); },
     removeProperty(key) { values.delete(key); },
     getPropertyValue(key) { return values.get(key) ?? ''; },
     [Symbol.iterator]() { return values.keys(); }
@@ -171,6 +171,14 @@ function runtimeFixture({
   const anchor = new Element('div');
   anchor.getBoundingClientRect = () => ({ left: width / 2 - 100, top: offscreen ? height : height / 2 - 100, width: 200, height: 200 });
   const inertElements = ['.topbar', '#main-content', '.bottom-bar'].map(() => new Element());
+  const targets = new Map([
+    ['#main-cookie', [cookie]], ['.topbar', [inertElements[0]]],
+    ['.bottom-bar', [inertElements[2]]], ['.bottom-bar > *', [new Element(), new Element()]]
+  ]);
+  for (const selector of ['.cookie-pulse', '.intro-logo-surface', '.cookie-facets', '.cookie-word', '.cookie-spectrum', '.cookie-halo', '.world', '.home-tip']) {
+    targets.set(selector, [new Element()]);
+  }
+  for (const element of [...targets.values()].flat()) element.style = Object.create(style);
   inertElements[0].inert = true;
   const root = { dataset: { intro: 'pending' }, style, removeAttribute(name) { if (name === 'data-intro') delete this.dataset.intro; } };
   const body = new Element('body');
@@ -178,7 +186,10 @@ function runtimeFixture({
   const document = {
     documentElement: root, body, activeElement: body,
     querySelector(selector) { return selector === '#main-cookie' ? cookie : null; },
-    querySelectorAll() { return inertElements; },
+    querySelectorAll(selector) {
+      if (selector === '.topbar, #main-content, .bottom-bar') return inertElements;
+      return selector.split(', ').flatMap(part => targets.get(part) ?? []);
+    },
     createElement(tag) { const node = new Element(tag); created.push(node); return node; },
     createElementNS(_ns, tag) { if (failSvg) throw new Error('SVG unavailable'); return new Element(tag); }
   };
@@ -187,13 +198,15 @@ function runtimeFixture({
   class MutationObserverStub { constructor(fn) { this.fn = fn; } observe() {} disconnect() { this.disconnected = true; } }
   class ImageStub { complete = true; naturalWidth = 256; }
   const intro = {
-    active: true, reduced, benchmark, reviewTime: null, cleanups: [],
+    active: true, busy: true, effectsActive: false, reduced, benchmark, reviewTime: null, cleanups: [],
+    settle() { this.busy = false; },
     onFinish(fn) { this.cleanups.push(fn); },
     finish() {
       if (!this.active) return;
       this.active = false;
       for (const fn of this.cleanups.splice(0)) fn();
       root.removeAttribute('data-intro');
+      if (!this.effectsActive) this.settle();
     }
   };
   const window = {
@@ -219,7 +232,7 @@ function runtimeFixture({
   vm.runInNewContext(performanceSource, context);
   vm.runInNewContext(runtimeSource, context);
   return {
-    intro, frames, listeners, motionListeners, warnings, values, writes, attributeWrites, style, root, body, document,
+    intro, frames, listeners, motionListeners, warnings, values, writes, attributeWrites, style, root, body, document, targets,
     performance: window.IntroPerformance,
     field: created.find(node => node.className === 'intro-playfield'), inertElements,
     canvas: created.find(node => node.className === 'intro-star-burst'),
@@ -356,11 +369,13 @@ test('Star burst caps backing pixels on high-DPI and 4K screens', () => {
 test('Modest hardware and slow frame cadence use fewer stars without narrowing the fan', () => {
   for (const options of [{ cores: 4 }, { memory: 4 }, { slow: true }, { cores: 2, width: 390, height: 844 }]) {
     const fixture = runtimeFixture({ ...options, dpr: 3 });
+    const initialSize = [fixture.canvas.width, fixture.canvas.height];
     runFrame(fixture, 0);
     if (options.slow) for (let time = 33; time < 2820; time += 33) runFrame(fixture, time);
     const stars = burstFrame(fixture, 3500);
     assert.equal(stars.length, options.width ? 48 : 72);
-    assert.ok(fixture.canvas.width * fixture.canvas.height <= 1000000);
+    assert.ok(fixture.canvas.width * fixture.canvas.height <= (options.slow ? 2000000 : 1000000));
+    assert.deepEqual([fixture.canvas.width, fixture.canvas.height], initialSize, 'quality adaptation must not reallocate the visible canvas');
     const width = options.width ?? 1440;
     assert.ok(stars.some(star => star.x < width * .025));
     assert.ok(stars.some(star => star.x > width * .975));
@@ -451,6 +466,7 @@ test('Runtime skip cancels the scheduled frame and releases all overlays', () =>
   assert.equal(fixture.intro.active, false);
   assert.equal(fixture.frames.size, 0);
   assert.equal(fixture.field.removed, true);
+  assert.equal(fixture.intro.busy, false);
   assert.ok(fixture.inertElements[0].inert);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
 });
@@ -496,7 +512,7 @@ test('Boot handles storage failures without letting system reduced motion disabl
   assert.equal(fixture.root.dataset.intro, 'pending');
   fixture.intro.finish();
   assert.equal(fixture.intro.active, false);
-  assert.deepEqual(fixture.dispatched, ['site:intro-end']);
+  assert.deepEqual(fixture.dispatched, ['site:intro-end', 'site:intro-idle']);
   assert.deepEqual(fixture.root.removed, ['data-intro']);
 });
 
@@ -533,8 +549,45 @@ test('Boot finish runs every cleanup once and persists completion', () => {
   fixture.intro.finish();
   assert.equal(calls, 2);
   assert.equal(fixture.storage.get('nathan-intro-seen'), '1');
-  assert.deepEqual(fixture.dispatched, ['site:intro-end']);
+  assert.deepEqual(fixture.dispatched, ['site:intro-end', 'site:intro-idle']);
   assert.equal(fixture.root.dataset.intro, undefined);
+});
+
+test('Background work waits for the falling-star tail, while skips settle immediately', () => {
+  const boot = bootFixture();
+  boot.intro.effectsActive = true;
+  boot.intro.finish();
+  assert.equal(boot.intro.busy, true);
+  assert.deepEqual(boot.dispatched, ['site:intro-end']);
+  boot.intro.effectsActive = false;
+  boot.intro.settle();
+  boot.intro.settle();
+  assert.equal(boot.intro.busy, false);
+  assert.deepEqual(boot.dispatched, ['site:intro-end', 'site:intro-idle']);
+
+  const runtime = runtimeFixture();
+  runFrame(runtime, 0);
+  runFrame(runtime, 3860);
+  assert.equal(runtime.intro.active, false);
+  assert.equal(runtime.intro.busy, true);
+  runFrame(runtime, 5320);
+  assert.equal(runtime.intro.busy, false);
+});
+
+test('Logo morph styles stay local and score updates use one glyph texture', () => {
+  const fixture = runtimeFixture();
+  runFrame(fixture, 0);
+  runFrame(fixture, 650);
+  const digits = descendants(fixture.field).filter(node => node.className === 'intro-hud-digit');
+  assert.ok(digits.length > 0);
+  assert.ok(digits.every(node => node.tagName === 'span' && node.src === undefined));
+  assert.ok(digits.some(node => node.style.backgroundPosition === '-360px 0'), 'combo multiplier uses the x glyph');
+  runFrame(fixture, 3100);
+  assert.ok(fixture.writes.length > 0);
+  assert.ok(fixture.writes.every(([, , owner]) => owner !== fixture.root.style), 'no per-frame variable invalidates the whole site');
+  assert.ok(!fixture.writes.some(([name]) => /--intro-(rim|fill)$/.test(name)), 'the morph does not repaint changing shadows or backgrounds');
+  fixture.intro.finish();
+  assert.equal(fixture.values.size, 0, 'all localized overrides are removed on skip');
 });
 
 test('Enter skips once, suppresses held repeats, and releases suppression on keyup', () => {

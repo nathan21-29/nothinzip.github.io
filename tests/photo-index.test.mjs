@@ -73,6 +73,23 @@ test('Regional captions support nested filenames and meaningful fallback alt tex
   assert.equal(photos[1].alt, 'Boathouses reflected in the bay at Ine');
 });
 
+test('Optional photo notes and tags survive indexing and reject malformed annotations', async t => {
+  const { root, put } = await fixture(t);
+  await put('hokkaido', 'IMG_0977.JPG');
+  await put('hokkaido', 'IMG_0984.JPG');
+  const annotation = { note: 'Snow at dawn.\nWorth the early start.', tags: ['snow', 'favourite'] };
+  await put('hokkaido', 'captions.json', JSON.stringify({ 'IMG_0977.JPG': annotation }));
+  const photos = await buildPhotoIndex(root);
+  assert.equal(photos[0].note, annotation.note);
+  assert.deepEqual(photos[0].tags, annotation.tags);
+  assert.equal(photos[1].note, undefined);
+  assert.equal(photos[1].tags, undefined);
+  for (const invalid of [{ note: 42 }, { tags: 'snow' }, { tags: ['snow', 42] }]) {
+    await put('hokkaido', 'captions.json', JSON.stringify({ 'IMG_0977.JPG': invalid }));
+    await assert.rejects(buildPhotoIndex(root), /captions\.json: IMG_0977\.JPG/);
+  }
+});
+
 test('Camera filenames stay out of captions while custom captions and human filenames remain visible', async t => {
   const { root, put } = await fixture(t);
   for (const filename of ['_DSC5712.jpg', 'DSC_1234.jpg', 'DSC9000.jpg', 'IMG_0985.JPG', 'subfolder/img_0032.jpg']) {
