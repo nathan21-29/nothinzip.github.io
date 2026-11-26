@@ -323,3 +323,43 @@ body:not([data-screen="about"]) .acknowledgements{display:none}
 .restart-intro:hover{color:#ffa9d0}
 .restart-intro svg{width:1.125rem;height:1.125rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 body:not([data-screen="home"]) .restart-intro{display:none}
+
+/* An invisible footer zone anchors the corners independently of page actions. */
+.bottom-bar{display:block;background:none;border:0;box-shadow:none;padding:0;pointer-events:none}
+.bottom-bar > *{pointer-events:auto}
+.bottom-bar .signature{position:absolute;left:max(1rem,env(safe-area-inset-left));top:50%;transform:translateY(-50%)}
+.bottom-bar .footer-controls{position:absolute;right:max(1rem,env(safe-area-inset-right));top:50%;transform:translateY(-50%);margin:0;gap:1.25rem}
+body[data-screen="projects"] .bottom-bar .footer-controls{margin:0}
+.bottom-bar .footer-clock{display:inline;font-variant-numeric:tabular-nums;min-width:5ch}
+.bottom-bar .footer-start{position:absolute;left:4.5rem;top:0;height:100%}
+.footer-actions{--footer-cell-width:5rem;position:absolute;left:50%;bottom:.5rem;transform:translateX(-50%);display:flex;align-items:stretch;justify-content:center;gap:0;width:max-content;max-width:calc(100vw - 2rem);min-height:3.5rem;padding:0;border:1px solid #ffffff25;border-radius:999px;corner-shape:round;background:rgba(34,24,32,.75)}
+.footer-actions .project-toolbar{display:contents}
+.footer-actions .project-toolbar button{position:relative;display:grid;place-items:center;width:var(--footer-cell-width);height:3.5rem;padding:0;border-radius:0;corner-shape:round;transition:background .18s ease-out}
+.footer-actions .project-toolbar button:last-child{border-radius:0 999px 999px 0}
+.footer-actions .project-toolbar button:hover{background:#ffffff15}
+.footer-actions .footer-action-tooltip{position:absolute;z-index:1;left:50%;bottom:calc(100% + .75rem);display:flex;align-items:center;gap:.75rem;width:max-content;padding:.5rem .875rem;border:1px solid #ffffff24;border-radius:.75rem;corner-shape:squircle;background:rgba(24,15,25,.9);box-shadow:0 .25rem 1rem #0004;color:#fff9fc;font-size:.8125rem;font-weight:normal;white-space:nowrap;pointer-events:none;visibility:hidden;opacity:0;transform:translate(-50%,.375rem);transition:opacity .15s ease-out,transform .2s ease-out,visibility .2s}
+.footer-actions .footer-action-tooltip small{display:inline;color:#d6b9cb;font-size:.6875rem}
+.footer-actions button:focus-visible .footer-action-tooltip{visibility:visible;opacity:1;transform:translate(-50%,0)}
+@media(hover:hover){.footer-actions button:hover .footer-action-tooltip{visibility:visible;opacity:1;transform:translate(-50%,0)}}
+.footer-actions .back-button{position:relative;display:grid;place-items:center;width:var(--footer-cell-width);height:3.5rem;padding:0;flex-shrink:0;white-space:nowrap;border-radius:999px;corner-shape:round}
+.footer-actions:has(.project-toolbar:not([hidden])) .back-button{border-radius:999px 0 0 999px}
+.back-button > svg{width:1.125rem;height:1.125rem}
+.footer-actions button:focus-visible{outline-offset:0}
+/* Contiguous action hitboxes tile the pill; the shared lens uses the same cells. */
+.has-footer-glass{isolation:isolate}
+.has-footer-glass button{position:relative;z-index:1}
+.footer-glass-clip{position:absolute;z-index:0;inset:0;border-radius:inherit;corner-shape:round;overflow:hidden;pointer-events:none}
+.footer-glass{position:absolute;z-index:0;left:0;top:0;width:0;height:0;pointer-events:none;opacity:0;border:1px solid #ffffff65;border-radius:999px;corner-shape:round;background:radial-gradient(ellipse at 25% 0%,#ffffff38,transparent 65%),linear-gradient(155deg,#ffffff28,#ffffff09 48%,#f6a6cd1c);box-shadow:inset 0 1px 1px #ffffff70,inset 0 -1px 2px #ffffff20,0 3px 10px #10071225;backdrop-filter:blur(8px) saturate(1.35);-webkit-backdrop-filter:blur(8px) saturate(1.35);transform-origin:center}
+.footer-actions.has-footer-glass .project-toolbar button:hover{background:none}
+@media(max-width:65rem){
+  .bottom-bar .motion-control span{display:none}
+}
+@media(max-width:40rem){
+  .footer-actions{--footer-cell-width:4.5rem;bottom:3.875rem}
+  .footer-actions #show-case-study{display:flex}
+  .footer-actions .back-button{font-size:1rem}
+  .bottom-bar .footer-controls{gap:.75rem}
+  body[data-screen="projects"] .projects-screen{padding-bottom:7.5rem}
+  body[data-screen="about"] .about-screen{padding-bottom:8rem}
+  body[data-screen="photography"] .photography-screen{padding-bottom:8rem}
+}

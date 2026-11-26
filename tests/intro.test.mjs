@@ -550,7 +550,7 @@ test('Runtime reduced motion completes its 180ms fade', () => {
   assert.deepEqual(fixture.warnings, []);
 });
 
-test('Runtime skip cancels the scheduled frame and releases all overlays', () => {
+test('Emergency finish cancels the scheduled frame and releases all overlays', () => {
   const fixture = runtimeFixture();
   fixture.intro.finish();
   assert.equal(fixture.intro.active, false);
@@ -559,6 +559,86 @@ test('Runtime skip cancels the scheduled frame and releases all overlays', () =>
   assert.equal(fixture.intro.busy, false);
   assert.ok(fixture.inertElements[0].inert);
   assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
+});
+
+test('Skip fades the current notes and cursor in 100ms and plays the normal ending', () => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    const fixture = runtimeFixture(viewport);
+    runFrame(fixture, 0);
+    burstFrame(fixture, 650);
+    const paint = fixture.canvas.context;
+    const gameplayImages = () => paint.images.filter(image => image.source !== fixture.atlas);
+    const before = gameplayImages().map(image => ({ ...image }));
+    assert.ok(before.some(image => image.source.src?.includes('cursor-')));
+    assert.ok(before.some(image => image.source.src?.includes('hitcircle')));
+    fixture.intro.animateSkip();
+    fixture.intro.animateSkip(); // repeated input cannot restart the exit
+    assert.equal(fixture.frames.size, 1);
+    burstFrame(fixture, 700);
+    assert.deepEqual(gameplayImages(), before, 'skip starts from the last painted gameplay pose');
+    burstFrame(fixture, 750);
+    const halfway = gameplayImages();
+    assert.equal(halfway.length, before.length);
+    halfway.forEach((image, index) => {
+      assert.equal(image.opacity, before[index].opacity * .5);
+      assert.equal(image.sx, before[index].sx);
+      assert.equal(image.sy, before[index].sy);
+    });
+    burstFrame(fixture, 800);
+    assert.equal(gameplayImages().length, 0, 'notes and cursor are gone at 100ms');
+    assert.equal(fixture.intro.active, true, 'menu remains protected during its reveal');
+    const boards = descendants(fixture.field).filter(node => node.className?.split(' ').includes('intro-hud-board'));
+    assert.ok(boards.length > 0, 'HUD survives the note fade');
+    burstFrame(fixture, 900);
+    assert.ok(boards.every(board => /rotate[XY]\(-?[1-9]/.test(board.style.transform)), 'every HUD board folds toward its screen edge');
+    const regular = runtimeFixture(viewport);
+    runFrame(regular, 0);
+    runFrame(regular, finalHit + 200);
+    assert.deepEqual(fixture.values, regular.values, 'logo and menu follow the regular ending');
+    fixture.intro.animateSkip();
+    runFrame(fixture, 1740);
+    assert.equal(fixture.intro.active, false);
+    assert.equal(fixture.intro.busy, true, 'confetti continues over the usable menu');
+    assert.ok(fixture.inertElements.slice(1).every(element => !element.inert));
+    assert.equal(fixture.values.size, 0);
+    runFrame(fixture, 3200);
+    assert.equal(fixture.intro.busy, false);
+    assert.equal(fixture.field.removed, true);
+    assert.equal(fixture.frames.size, 0);
+    assert.deepEqual(fixture.warnings, []);
+    regular.intro.finish();
+  }
+});
+
+test('Skipping during the menu reveal continues from its current pose', () => {
+  const fixture = runtimeFixture();
+  runFrame(fixture, 0);
+  runFrame(fixture, finalHit + 400);
+  const scale = fixture.values.get('--intro-logo-scale');
+  fixture.intro.animateSkip();
+  runFrame(fixture, finalHit + 420);
+  assert.equal(fixture.values.get('--intro-logo-scale'), scale);
+  runFrame(fixture, introEnd + 20);
+  assert.equal(fixture.intro.active, false);
+  fixture.listeners.get('resize')();
+  assert.equal(fixture.intro.busy, false);
+});
+
+test('Skip inputs request the animated exit and remain consumed until it finishes', () => {
+  for (const input of ['click', 'Enter', 'Escape', 'Tab', ' ']) {
+    const fixture = bootFixture();
+    let calls = 0;
+    fixture.intro.animateSkip = () => { calls++; };
+    const listener = fixture.listeners.window.get(input === 'click' ? 'click' : 'keydown').fn;
+    const event = inputEvent(input);
+    listener(event);
+    assert.equal(calls, 1);
+    assert.equal(fixture.intro.active, true);
+    assert.equal(event.prevented, true);
+    assert.equal(event.stopped, true);
+    fixture.intro.finish();
+    assert.equal(fixture.storage.get('nathan-intro-seen'), '1');
+  }
 });
 
 test('Runtime failures restore the page instead of leaving it hidden', () => {

@@ -47,6 +47,8 @@
     return true;
   }
   let start;
+  let lastTime = 0;
+  let skipping;
 
   function clearField(status = 'interrupted') {
     cancelAnimationFrame(frame);
@@ -62,6 +64,7 @@
     window.removeEventListener('popstate', onHistoryChange);
   }
   function release() {
+    delete intro.animateSkip;
     if (!burstTail) clearField();
     motionObserver?.disconnect();
     for (const [element, inert] of restores) element.inert = inert;
@@ -145,7 +148,7 @@
     if (!starBurst.context) { intro.finish(); return; }
     const burstEnd = starBurst.end;
     gameplay = window.IntroGameplay.create(starBurst.context, T, center, scale);
-    function draw(time) {
+    function draw(time, skipAge = 0) {
       hud.draw(time);
       const age = time - T.final.hit;
       const morph = T.ease(age / 680);
@@ -165,7 +168,9 @@
       reveal(profile);
       starBurst.beginFrame();
       starBurst.draw(time);
-      gameplay.draw(time);
+      // Freeze the last painted notes/cursor while fading them independently
+      // of the ending clock that folds the HUD and reveals the menu.
+      gameplay.draw(skipping ? skipping.time : time, skipping ? 1 - T.clamp(skipAge / 100) : 1);
       set('footer', T.ease(footer)); set('hint', T.ease((age - 660) / 360));
       // Fast ease-out with one small, damped settle, matching the menu transitions.
       const settle = progress => progress < .7 ? T.mix(-1, .018, T.ease(progress / .7)) : .018 * (1 - T.ease((progress - .7) / .3));
@@ -198,9 +203,14 @@
           start = timestamp;
           benchmark?.begin('gameplay', timestamp);
         }
+        if (skipping && skipping.at === undefined) {
+          skipping.at = timestamp;
+          start = timestamp - Math.max(T.final.hit, skipping.time);
+        }
         const time = intro.reviewTime ?? Math.min(T.duration, timestamp - start);
         if (intro.reviewTime !== null || time >= T.duration || shouldPaint(timestamp, frameInterval)) {
-          draw(time);
+          draw(time, skipping ? timestamp - skipping.at : 0);
+          lastTime = time;
           benchmark?.paint('gameplay', timestamp);
         }
         if (time >= T.duration && intro.reviewTime === null) {
@@ -218,6 +228,14 @@
         console.warn('Startup animation ended early.', error);
         intro.finish();
       }
+    };
+    intro.animateSkip = () => {
+      if (skipping) return;
+      skipping = { time: lastTime };
+      intro.reviewTime = null;
+      cancelAnimationFrame(frame);
+      lastPaint = undefined;
+      frame = requestAnimationFrame(tick);
     };
     draw(0);
     frame = requestAnimationFrame(tick);

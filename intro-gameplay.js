@@ -22,6 +22,7 @@
       const hits = T.objects.map(point => point.hit);
       const trailInterval = 1000 / 30;
       let trailSample = -1, trailPoints = [], disposed = false;
+      let fadeOpacity = 1;
       // Each of the five perfect-circle sliders is rasterized once, tightly
       // bounded to its own curve. The visible playfield still uses one canvas.
       const tracks = T.sliders.map(slider => {
@@ -50,12 +51,14 @@
         return { slider, canvas, ink, left, top, width, height };
       });
       function sprite(source, size, opacity = 1) {
+        opacity *= fadeOpacity;
         if (opacity <= 0 || !source.complete || !source.naturalWidth) return false;
         context.globalAlpha = opacity;
         context.drawImage(source, -size / 2, -size / 2, size, size);
         return true;
       }
       function circle(x, y, r, fill, stroke, width, opacity) {
+        opacity *= fadeOpacity;
         if (opacity <= 0) return;
         context.globalAlpha = opacity;
         context.beginPath();
@@ -74,8 +77,9 @@
         sprite(approach, T.diameter * (1 + 1.15 * T.clamp(until / T.approach)), opacity * .9);
         context.restore();
       }
-      function draw(time) {
-        if (disposed || time >= T.final.hit + 300) return;
+      function draw(time, fade = 1) {
+        if (disposed || fade <= 0 || time >= T.final.hit + 300) return;
+        fadeOpacity = fade;
         context.save();
         context.translate(center.x, center.y);
         context.scale(scale, scale);
@@ -91,7 +95,7 @@
             const tailAge = time - point.end;
             const trackOpacity = opacity * (1 - T.clamp(tailAge / 200));
             if (trackOpacity > 0 && track.ink) {
-              context.globalAlpha = trackOpacity;
+              context.globalAlpha = trackOpacity * fadeOpacity;
               context.drawImage(track.canvas, track.left, track.top, track.width, track.height);
             }
             if (sliding) {

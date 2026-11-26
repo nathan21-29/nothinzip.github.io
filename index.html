@@ -28,6 +28,7 @@
   <script src="photography.js" defer></script>
   <script src="spectrum.js" defer></script>
   <script src="app.js" defer></script>
+  <script src="footer-glass.js" defer></script>
   <script id="osu-stats-script" src="osu-stats.js" data-endpoint="https://nathan-osu-stats.oofey123.workers.dev/stats" defer></script>
   <script src="cursor.js" defer></script>
   <script src="intro-beatmap.js" defer></script>
@@ -96,7 +97,7 @@
           <div class="library-tools"><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input type="search" id="project-search" placeholder="Type to find a project…" aria-label="Search projects"><kbd>/</kbd></label><label class="sort-label"><span class="visually-hidden">Sort projects</span><select id="project-sort"><option value="featured">Featured</option><option value="title">Title A–Z</option></select><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></label></div>
           <div class="collection-tabs" role="group" aria-label="Project collection"><button class="active" data-filter="all" aria-pressed="true">All projects <span>4</span></button><button data-filter="software" aria-pressed="false">Software</button><button data-filter="hardware" aria-pressed="false">Hardware</button></div>
           <div class="song-list" id="song-list"></div>
-          <div class="library-hint"><span class="keycap-pair"><kbd>↑</kbd><kbd>↓</kbd></span> to select<span class="hint-divider"></span><kbd>Enter</kbd> to open<span class="hint-divider"></span><kbd>Esc</kbd> to go back</div>
+          <div class="library-hint"><span class="keycap-pair"><kbd>↑</kbd><kbd>↓</kbd></span> to select</div>
         </section>
       </div>
     </section>
@@ -157,8 +158,12 @@
   </main>
 
   <footer class="bottom-bar">
-    <div class="footer-start"><span class="signature" id="signature">nc<span>!</span></span><button class="restart-intro" id="restart-intro" type="button" aria-label="Restart intro animation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 1 8M3 4v6h6"/></svg><span>Restart animation</span></button><button class="back-button" id="back-button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>back <kbd>Esc</kbd></button></div>
-    <div class="project-toolbar" id="project-toolbar" hidden><button id="random-project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-5 5M3 8h4l10 10h4M16 13l5 5-5 5M3 18h4l3-3"/></svg><span>Random<small>F2</small></span></button><button id="show-case-study"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Case study<small>Enter</small></span></button></div>
+    <span class="signature" id="signature">nc<span>!</span></span>
+    <div class="footer-start" data-footer-animate><button class="restart-intro" id="restart-intro" type="button" aria-label="Restart intro animation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 1 8M3 4v6h6"/></svg><span>Restart animation</span></button></div>
+    <nav class="footer-actions" id="footer-actions" aria-label="Page actions" data-footer-animate hidden>
+      <button class="back-button" id="back-button" aria-label="Back" aria-describedby="back-tooltip" aria-keyshortcuts="Escape" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg><span class="footer-action-tooltip" id="back-tooltip" role="tooltip">Back<small>Esc</small></span></button>
+      <div class="project-toolbar" id="project-toolbar" hidden><button id="random-project" aria-label="Random project" aria-describedby="random-project-tooltip" aria-keyshortcuts="F2"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-5 5M3 8h4l10 10h4M16 13l5 5-5 5M3 18h4l3-3"/></svg><span class="footer-action-tooltip" id="random-project-tooltip" role="tooltip">Random<small>F2</small></span></button><button id="show-case-study" aria-label="Read case study" aria-describedby="case-study-tooltip" aria-keyshortcuts="Enter"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span class="footer-action-tooltip" id="case-study-tooltip" role="tooltip">Case study<small>Enter</small></span></button></div>
+    </nav>
     <div class="footer-controls"><button class="motion-control" id="motion-toggle" aria-label="Reduce motion" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Motion on</span></button><span class="footer-clock" id="footer-clock"></span></div>
   </footer>
   <div class="transition-wipe" id="transition-wipe" aria-hidden="true"></div>

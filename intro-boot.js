@@ -23,6 +23,11 @@
     // A local-only still frame is useful for reviewing timing at narrow sizes.
     reviewTime: replay && params.has('introAt') ? Math.max(0, Math.min(8122, Number(params.get('introAt')) || 0)) : null,
     onFinish(cleanup) { cleanups.push(cleanup); },
+    skip() {
+      if (!intro.active) return;
+      if (intro.animateSkip) intro.animateSkip();
+      else intro.finish();
+    },
     settle() {
       if (!intro.busy) return;
       intro.busy = false;
@@ -54,9 +59,9 @@
     if (!intro.active || event.ctrlKey || event.altKey || event.metaKey) return;
     if (event.key === 'Enter') {
       suppressEnter = true;
-      event.preventDefault(); event.stopImmediatePropagation(); intro.finish();
+      event.preventDefault(); event.stopImmediatePropagation(); intro.skip();
     } else if (['Tab', 'Escape', ' '].includes(event.key)) {
-      event.preventDefault(); event.stopImmediatePropagation(); intro.finish();
+      event.preventDefault(); event.stopImmediatePropagation(); intro.skip();
     } else {
       event.preventDefault(); event.stopImmediatePropagation();
     }
@@ -68,7 +73,7 @@
   }, true);
   window.addEventListener('click', event => {
     if (!intro.active) return;
-    event.preventDefault(); event.stopImmediatePropagation(); intro.finish();
+    event.preventDefault(); event.stopImmediatePropagation(); intro.skip();
   }, true);
   document.addEventListener('visibilitychange', () => { if (document.hidden) intro.finish(); });
   // No load event or asset promise gates playback. This is a recovery deadline only.

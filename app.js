@@ -347,6 +347,7 @@
   }
 
   function applyScreen(screen, focus = true, animateFooter = false) {
+    const previousActionsWidth = $('#footer-actions').getBoundingClientRect().width;
     setCreditsOpen(false);
     clearScreenExit();
     resetProjectScroll();
@@ -366,7 +367,8 @@
     for (const name of screenNames) $(`#${name}-screen`).hidden = name !== screen;
     window.PhotoGallery?.setActive(screen === 'photography');
     $('#back-button').hidden = screen === 'home';
-    $('#signature').hidden = screen !== 'home';
+    $('#footer-actions').hidden = screen === 'home';
+    $('.footer-start').hidden = screen !== 'home';
     $('#restart-intro').hidden = screen !== 'home';
     $('#project-toolbar').hidden = screen !== 'projects';
     $('#main-menu').inert = screen !== 'home' || !state.menuOpen;
@@ -378,7 +380,7 @@
     panel.classList.remove('entering');
     const currentNavigation = navigationId;
     const introOwnsEntry = screen === 'home' && window.SiteIntro?.active;
-    if (animateFooter && state.motion) footerEntryAnimations = animateFooterContents(true);
+    if (animateFooter && state.motion) footerEntryAnimations = animateFooterContents(true, previousActionsWidth);
     requestAnimationFrame(() => {
       if (currentNavigation !== navigationId || screen !== state.screen) return;
       if (introOwnsEntry) return;
@@ -393,8 +395,8 @@
     }
   }
 
-  function animateFooterContents(entering) {
-    return $$('.bottom-bar > :not([hidden])').map(element => {
+  function animateFooterContents(entering, previousActionsWidth = 0) {
+    const animations = $$('.bottom-bar > [data-footer-animate]:not([hidden])').map(element => {
       const distance = Math.max(0, window.innerHeight - element.getBoundingClientRect().top) + 16;
       const resting = { translate: '0 0' };
       const belowScreen = { translate: `0 ${distance}px` };
@@ -405,6 +407,16 @@
         fill: entering ? 'none' : 'forwards'
       });
     });
+    const actions = $('#footer-actions');
+    if (entering && !actions.hidden && previousActionsWidth > 0) {
+      const width = actions.getBoundingClientRect().width;
+      if (Math.abs(width - previousActionsWidth) > 1) {
+        animations.push(actions.animate([
+          { width: `${previousActionsWidth}px` }, { width: `${width}px` }
+        ], { duration: 520, easing: 'cubic-bezier(.16, 1, .3, 1)' }));
+      }
+    }
+    return animations;
   }
 
   function clearScreenExit() {
@@ -412,7 +424,7 @@
     footerEntryAnimations = [];
     screenExitAnimations.forEach(animation => animation.cancel());
     screenExitAnimations = [];
-    $$('.screen,.bottom-bar,#profile-dropdown').forEach(element => { element.inert = false; });
+    $$('.screen,[data-footer-animate],#profile-dropdown').forEach(element => { element.inert = false; });
   }
 
   function navigate(screen, { push = true } = {}) {
@@ -436,9 +448,10 @@
     const wipe = $('#transition-wipe');
     if (!state.motion) { pendingScreen = null; wipe.classList.remove('is-active'); applyScreen(screen); return; }
     pendingScreen = screen;
-    const footer = $('.bottom-bar');
-    if (footer.contains(document.activeElement)) $('.profile').focus({ preventScroll: true });
-    footer.inert = true;
+    $$('[data-footer-animate]').forEach(element => {
+      if (element.contains(document.activeElement)) $('.profile').focus({ preventScroll: true });
+      element.inert = true;
+    });
     screenExitAnimations = animateFooterContents(false);
     {
       wipe.classList.remove('is-active');
