@@ -5,6 +5,8 @@
   const BUFFER_X = 12;
   const BUFFER_Y = 6;
   const PILL_INSET = 8;
+  const SLICE_SIZE = 64;
+  const KEYS = ['x', 'y', 'width', 'height', 'opacity'];
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
   let cursorOwner = null;
   const groups = [...document.querySelectorAll('.footer-actions,.footer-start,.footer-controls')];
@@ -13,6 +15,14 @@
     const lens = document.createElement('div');
     lens.className = 'footer-glass';
     lens.setAttribute('aria-hidden', 'true');
+    // Fixed-size end caps and a stretched middle keep rounded ends without
+    // resizing/repainting a blurred, bordered element on every spring frame.
+    const slices = ['left', 'middle', 'right'].map(side => {
+      const slice = document.createElement('span');
+      slice.className = `footer-glass-slice footer-glass-${side}`;
+      lens.append(slice);
+      return slice;
+    });
     if (pill) {
       // Clip at the pill's outer edge, leaving room for the lens to stretch vertically.
       // The lens geometry reserves its own inset; tooltips remain outside this layer.
@@ -34,30 +44,48 @@
     let transferStart = null;
     let pressed = false;
     let pillWidth = 0;
+    let geometry = null;
+    let lastAnchor = null;
+    const buttons = [...group.querySelectorAll('button')];
     const reduced = () => document.body.classList.contains('reduced-motion');
     const available = button => button && !button.disabled && !button.closest('[hidden],[inert]') && button.getClientRects().length;
 
     function releaseCursor() {
       if (cursorOwner !== group) return;
       cursorOwner = null;
+      lastAnchor = null;
       window.SiteCursor?.setMorphTarget(null);
     }
 
     function paint(squeeze = 0) {
       const press = pressed ? .94 : 1;
-      lens.style.width = `${Math.max(0, current.width).toFixed(2)}px`;
-      lens.style.height = `${Math.max(0, current.height).toFixed(2)}px`;
+      const width = Math.max(0, current.width);
+      const height = Math.max(0, current.height);
       const scaleX = (1 - squeeze * .4) * press;
-      const halfWidth = Math.max(0, current.width) * scaleX / 2;
+      const halfWidth = width * scaleX / 2;
       // Keep the lens inside the inset even while tracking at the outer buttons.
       const x = pill ? Math.max(PILL_INSET + halfWidth, Math.min(pillWidth - PILL_INSET - halfWidth, current.x)) : current.x;
       const y = current.y;
-      lens.style.transform = `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) translate(-50%,-50%) scale(${scaleX.toFixed(3)},${((1 + squeeze * .12) * press).toFixed(3)})`;
-      lens.style.opacity = Math.max(0, Math.min(1, current.opacity)).toFixed(3);
-      if (cursorOwner === group) {
-        const origin = group.getBoundingClientRect();
-        window.SiteCursor?.setMorphTarget({ x: origin.left + group.clientLeft + x, y: origin.top + group.clientTop + y });
+      writeStyle(lens, 'transform', `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) scale(${scaleX.toFixed(3)},${((1 + squeeze * .12) * press).toFixed(3)})`);
+      writeStyle(lens, 'opacity', Math.max(0, Math.min(1, current.opacity)).toFixed(3));
+      const cap = Math.min(width, height) / 2;
+      const middle = Math.max(0, width - cap * 2);
+      const positions = [-width / 2, -width / 2 + cap, width / 2 - cap];
+      slices.forEach((slice, index) => {
+        const scale = index === 1 ? middle / SLICE_SIZE : cap / (SLICE_SIZE / 2);
+        writeStyle(slice, 'transform', `translate3d(${positions[index].toFixed(3)}px,${(-height / 2).toFixed(3)}px,0) scale(${scale.toFixed(6)},${(height / SLICE_SIZE).toFixed(6)})`);
+      });
+      if (cursorOwner === group && geometry) {
+        const anchor = { x: geometry.x + x, y: geometry.y + y };
+        if (!lastAnchor || anchor.x !== lastAnchor.x || anchor.y !== lastAnchor.y) {
+          window.SiteCursor?.setMorphTarget(anchor);
+          lastAnchor = anchor;
+        }
       }
+    }
+
+    function writeStyle(element, property, value) {
+      if (element.style[property] !== value) element.style[property] = value;
     }
 
     function tick(time) {
@@ -66,7 +94,7 @@
       lastTime = time;
       let moving = false;
       // A damped spring preserves momentum when scrubbing reverses direction.
-      for (const key of Object.keys(current)) {
+      for (const key of KEYS) {
         velocity[key] += ((target[key] - current[key]) * 420 - velocity[key] * 36) * dt;
         current[key] += velocity[key] * dt;
         const tolerance = key === 'opacity' ? .002 : .025;
@@ -86,7 +114,7 @@
         frame = 0;
         transferStart = null;
         Object.assign(current, target);
-        for (const key of Object.keys(velocity)) velocity[key] = 0;
+        for (const key of KEYS) velocity[key] = 0;
         paint();
       } else if (!frame) frame = requestAnimationFrame(tick);
     }
@@ -95,7 +123,6 @@
       const rect = button.getBoundingClientRect();
       const hitLeft = rect.left - origin.left - group.clientLeft;
       const hitX = hitLeft + rect.width / 2;
-      pillWidth = group.clientWidth;
       const left = pill ? Math.max(PILL_INSET, hitLeft) : hitLeft;
       const right = pill ? Math.min(pillWidth - PILL_INSET, hitLeft + rect.width) : hitLeft + rect.width;
       return { x: pill ? (left + right) / 2 : hitX, hitX,
@@ -106,18 +133,31 @@
         height: pill ? Math.max(0, rect.height - PILL_INSET * 2) : rect.height + BUFFER_Y * 2, hitWidth: rect.width };
     }
 
-    function show(button, position = null) {
-      if (!available(button)) return;
+    function measure() {
+      if (geometry) return geometry;
+      // Read all geometry together, before paint writes. Reuse throughout the
+      // interaction, including cursor handoff; invalidate on actual layout changes.
       const origin = group.getBoundingClientRect();
-      const box = bounds(button, origin);
-      const entry = position ? { x: position.x - origin.left - group.clientLeft, y: position.y - origin.top - group.clientTop } : box;
+      pillWidth = group.clientWidth;
+      geometry = {
+        x: origin.left + group.clientLeft, y: origin.top + group.clientTop,
+        boxes: new Map(buttons.filter(available).map(button => [button, bounds(button, origin)]))
+      };
+      return geometry;
+    }
+
+    function show(button, position = null) {
+      const layout = measure();
+      const box = layout.boxes.get(button);
+      if (!box || button.disabled) return;
+      const entry = position ? { x: position.x - layout.x, y: position.y - layout.y } : box;
       const wasVisible = target.opacity > 0;
       if (position) cursorOwner = group;
       else releaseCursor();
       if (!wasVisible) {
         // Grow from the entry x coordinate, with the vertical axis locked throughout.
         Object.assign(current, { x: entry.x, y: box.y, width: 2, height: 2, opacity: 0 });
-        for (const key of Object.keys(velocity)) velocity[key] = 0;
+        for (const key of KEYS) velocity[key] = 0;
         transferStart = null;
         paint();
       } else if (button !== activeButton && !reduced()) transferStart = performance.now();
@@ -138,10 +178,9 @@
       target.opacity = 0;
       target.width = 2;
       target.height = 2;
-      if (pointer) {
-        const origin = group.getBoundingClientRect();
+      if (pointer && geometry) {
         // Collapse toward the exit while preserving the lens's locked vertical axis.
-        target.x = pointer.x - origin.left - group.clientLeft;
+        target.x = pointer.x - geometry.x;
       }
       queue();
     }
@@ -149,14 +188,13 @@
     function onPointer(event) {
       if (!finePointer.matches || event.pointerType === 'touch') return;
       pointer = { x: event.clientX, y: event.clientY };
+      const layout = measure();
       const button = event.target.closest('button');
-      if (button && group.contains(button) && available(button)) { show(button, pointer); return; }
+      if (layout.boxes.has(button) && !button.disabled) { show(button, pointer); return; }
       // Keep the same lens alive through the space between adjacent buttons.
-      const buttons = [...group.querySelectorAll('button')].filter(available);
-      const origin = group.getBoundingClientRect();
-      const x = pointer.x - origin.left - group.clientLeft;
-      const y = pointer.y - origin.top - group.clientTop;
-      const boxes = buttons.map(button => bounds(button, origin));
+      const x = pointer.x - layout.x;
+      const y = pointer.y - layout.y;
+      const boxes = [...layout.boxes.values()];
       for (let i = 1; i < boxes.length; i++) {
         const left = boxes[i - 1], right = boxes[i];
         const start = left.hitX + left.hitWidth / 2;
@@ -176,7 +214,7 @@
         return;
       }
       releaseCursor();
-      if (group.contains(document.activeElement) && available(document.activeElement) && document.activeElement.matches(':focus-visible')) show(document.activeElement);
+      if (layout.boxes.has(document.activeElement) && document.activeElement.matches(':focus-visible')) show(document.activeElement);
       else hide();
     }
 
@@ -189,7 +227,9 @@
       activeButton = null;
       pointer = null;
       pressed = false;
-      for (const key of Object.keys(current)) current[key] = target[key] = velocity[key] = 0;
+      geometry = null;
+      lastAnchor = null;
+      for (const key of KEYS) current[key] = target[key] = velocity[key] = 0;
       paint();
     }
 
@@ -201,6 +241,7 @@
       if (group.contains(document.activeElement) && document.activeElement.matches(':focus-visible')) show(document.activeElement);
       else hide();
       pointer = null;
+      geometry = null;
     });
     group.addEventListener('pointerdown', event => {
       if (event.pointerType !== 'touch' && activeButton) { pressed = true; queue(); }
@@ -208,7 +249,16 @@
     group.addEventListener('focusin', event => {
       if (event.target.matches('button:focus-visible')) show(event.target);
     });
-    group.addEventListener('focusout', () => { if (!pointer) hide(); });
+    group.addEventListener('focusout', () => {
+      if (!pointer) { hide(); geometry = null; }
+    });
+    // Footer entrance/exit transforms and responsive cells can move cached boxes.
+    for (const type of ['transitionend', 'animationend']) {
+      group.addEventListener(type, event => { if (event.target === group) reset(); });
+    }
+    const resize = new ResizeObserver(reset);
+    resize.observe(group);
+    buttons.forEach(button => resize.observe(button));
     new MutationObserver(reset).observe(group, { attributes: true, attributeFilter: ['hidden', 'inert', 'disabled'], subtree: true });
     return { reset, release() { if (pressed) { pressed = false; queue(); } } };
   });

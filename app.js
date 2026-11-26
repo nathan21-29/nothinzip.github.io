@@ -11,7 +11,7 @@
   const pointerQuery = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 801px)');
   const preference = readPreference('nathan-motion');
   const state = {
-    screen: 'home', menuOpen: false, selected: projects[0]?.id,
+    screen: 'home', menuOpen: false, homeTipDismissed: false, selected: projects[0]?.id,
     filter: 'all', query: '', sort: 'featured', expanded: true,
     motion: preference !== 'off'
   };
@@ -312,9 +312,13 @@
     $('#main-menu').inert = !state.menuOpen || state.screen !== 'home';
     $('#main-cookie').setAttribute('aria-expanded', String(state.menuOpen));
     $('#main-cookie').setAttribute('aria-label', state.menuOpen ? 'Open projects' : 'Open main menu');
-    $('#home-tip').innerHTML = state.menuOpen
-      ? '<span class="tip-dot"></span>Click the circle again for projects.<span class="tip-key"><kbd>Enter</kbd> to continue · <kbd>Esc</kbd> to close</span>'
-      : '<span class="tip-dot"></span>Click the circle. There\'s more on the other side.<span class="tip-key"><kbd>Enter</kbd> works, too</span>';
+    const homeTip = $('#home-tip');
+    homeTip.hidden = state.homeTipDismissed;
+    if (!state.homeTipDismissed) {
+      homeTip.innerHTML = state.menuOpen
+        ? '<span class="tip-dot"></span>Click the circle again for projects.<span class="tip-key"><kbd>Enter</kbd> to continue · <kbd>Esc</kbd> to close</span>'
+        : '<span class="tip-dot"></span>Click the circle. There\'s more on the other side.<span class="tip-key"><kbd>Enter</kbd> works, too</span>';
+    }
     if (state.menuOpen) preloadProjectImages();
   }
 
@@ -432,6 +436,7 @@
     if (pendingScreen === screen) return;
     if (screen === 'photography' && state.screen !== 'photography') photographyReturnScreen = state.screen === 'home' ? 'home' : 'about';
     if (screen === 'projects') preloadProjectImages();
+    if (screen !== 'home') state.homeTipDismissed = true;
     const id = ++navigationId;
     clearScreenExit();
     if (push && location.hash !== `#${screen}`) {
@@ -654,6 +659,7 @@
   let imageViewerQueuedDirection = 0;
   const IMAGE_CONTROLS_IDLE_DELAY = 2000;
   const imageControlsPointerQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
+  const phoneImageQuery = window.matchMedia('(pointer: coarse)');
   let imageControlsIdleTimer = 0;
   let imageControlsActiveAt = 0;
   let imageControlsPointerPosition = null;
@@ -708,11 +714,16 @@
     viewerImageCache.set(src, ready);
     return ready;
   }
+  function viewerImageSource(button) {
+    // Phone screens fit the 1600px preview. Decoding several camera originals
+    // can exhaust mobile memory before the viewer has even opened.
+    return phoneImageQuery.matches && button.dataset.imagePreview || button.dataset.image;
+  }
   function warmImageNeighbors() {
     // Retain only the current image and its immediate neighbors. Originals can
     // be large; keeping the entire collection decoded would exhaust tablet RAM.
     const nearby = [0, -1, 1].map(offset => imageViewerItems[(imageViewerIndex + offset + imageViewerItems.length) % imageViewerItems.length])
-      .filter(Boolean).map(item => item.dataset.image);
+      .filter(Boolean).map(viewerImageSource);
     for (const src of viewerImageCache.keys()) if (!nearby.includes(src)) viewerImageCache.delete(src);
     for (const src of nearby) loadViewerImage(src, 'low').catch(() => {});
   }
@@ -736,17 +747,34 @@
     imageViewerIndex = imageViewerItems.findIndex(item => item.dataset.image === button.dataset.image);
     const request = ++imageViewerRequest;
     if (!keepCollection) resetProjectScroll();
+    const dialog = $('#lightbox');
+    dialog.classList.toggle('is-photo-carousel', imageViewerItems.length > 0);
+    if (!keepCollection) {
+      // A tap must open immediately, even while an original loads or if its
+      // decode fails. Reuse the visible preview instead of a stale project image.
+      const preview = $('#lightbox-image');
+      preview.src = button.dataset.imagePreview || button.dataset.image;
+      preview.alt = button.dataset.imageAlt || '';
+    }
+    $('#lightbox-caption').textContent = button.dataset.imageCaption || '';
+    const note = $('#lightbox-note');
+    note.textContent = button.dataset.imageNote || '';
+    note.hidden = !note.textContent;
+    const tags = JSON.parse(button.dataset.imageTags || '[]');
+    $('#lightbox-tags').innerHTML = tags.map(tag => `<span>${escape(tag)}</span>`).join('');
+    $('#lightbox-tags').hidden = !tags.length;
+    syncImageArrows();
+    if (!dialog.open) dialog.showModal();
+    if (!keepCollection) { resetImageControlsIdle(); wakeImageControls(); }
     let selectedImage;
-    try { selectedImage = await loadViewerImage(button.dataset.image); }
+    try { selectedImage = await loadViewerImage(viewerImageSource(button)); }
     catch { return; }
     selectedImage.alt = button.dataset.imageAlt || '';
-    if (request !== imageViewerRequest || !button.isConnected) return;
-    const dialog = $('#lightbox');
+    if (request !== imageViewerRequest || !dialog.open) return;
     const previousImage = $('#lightbox-image');
     const slide = direction && dialog.open && state.motion && selectedImage !== previousImage;
     previousImage.removeAttribute('id');
     selectedImage.id = 'lightbox-image';
-    dialog.classList.toggle('is-photo-carousel', imageViewerItems.length > 0);
     if (slide) {
       imageViewerOutgoing = previousImage;
       previousImage.setAttribute('aria-hidden', 'true');
@@ -761,16 +789,6 @@
       selectedImage.removeAttribute('aria-hidden');
       previousImage.replaceWith(selectedImage);
     }
-    $('#lightbox-caption').textContent = button.dataset.imageCaption || '';
-    const note = $('#lightbox-note');
-    note.textContent = button.dataset.imageNote || '';
-    note.hidden = !note.textContent;
-    const tags = JSON.parse(button.dataset.imageTags || '[]');
-    $('#lightbox-tags').innerHTML = tags.map(tag => `<span>${escape(tag)}</span>`).join('');
-    $('#lightbox-tags').hidden = !tags.length;
-    syncImageArrows();
-    if (!dialog.open) dialog.showModal();
-    if (!keepCollection) { resetImageControlsIdle(); wakeImageControls(); }
     warmImageNeighbors();
     queuePointerMotion();
     if (slide) {
