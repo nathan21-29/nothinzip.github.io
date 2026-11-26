@@ -15,7 +15,7 @@ html[data-intro] .cookie{transform:translateZ(0);transition:none;background:#000
 .intro-logo-surface{display:none}
 /* Paint the finished face/rim/shadow once, then composite its reveal. Changing a
    blurred shadow and inset rim on every morph frame used to rerasterize the logo. */
-html[data-intro] .intro-logo-surface{display:block;position:absolute;inset:0;border-radius:50%;background:#e66da6;box-shadow:0 .5625rem 0 #a54379,0 1.25rem 3.125rem #10071090,inset 0 0 0 .625rem #fff7fb;opacity:var(--intro-depth,0);will-change:opacity;pointer-events:none}
+html[data-intro] .intro-logo-surface{display:block;position:absolute;inset:0;border-radius:50%;corner-shape:round;background:#e66da6;box-shadow:0 .5625rem 0 #a54379,0 1.25rem 3.125rem #10071090,inset 0 0 0 .625rem #fff7fb;opacity:var(--intro-depth,0);will-change:opacity;pointer-events:none}
 html[data-intro] .cookie-facets{opacity:var(--intro-facets,0)}
 html[data-intro] .cookie-word{opacity:var(--intro-word,0);transform:scale(var(--intro-word-scale,.88))}
 html[data-intro] #main-cookie::after{content:'';position:absolute;inset:0;background:url('assets/whitecat/default-5@2x.png') center/39.0625% 39.0625% no-repeat;opacity:var(--intro-number,0);pointer-events:none}
@@ -48,11 +48,11 @@ html[data-intro] .whitecat-trail{visibility:hidden}
 .intro-hud-keys-bg{position:absolute;left:70px;top:0;width:300px;height:70px;transform:rotate(90deg);transform-origin:0 0}
 .intro-hud-key{position:absolute;left:19px;width:60px;height:60px;transform-origin:50% 50%;color:#4e4643}
 .intro-hud-key-sprite{position:absolute;inset:0;width:60px;height:60px}
-.intro-hud-key-tint{position:absolute;left:11px;top:15px;width:39px;height:28px;border-radius:5px;background:#efcf65;mix-blend-mode:multiply;opacity:0}
+.intro-hud-key-tint{position:absolute;left:11px;top:15px;width:39px;height:28px;border-radius:5px;corner-shape:squircle;background:#efcf65;mix-blend-mode:multiply;opacity:0}
 .intro-hud-key[data-down="true"] .intro-hud-key-tint{opacity:.85}
 .intro-hud-key-label{position:absolute;left:11px;top:16px;width:39px;text-align:center;font-size:9px;line-height:10px}
 .intro-hud-key-count{position:absolute;left:11px;top:26px;width:39px;text-align:center;font-size:16px;line-height:17px;font-weight:bold}
-html[data-intro="pending"] #main-cookie::before,html[data-intro="settling"] #main-cookie::before{content:'';position:absolute;inset:0;border-radius:50%;background:url('assets/whitecat/hitcircleoverlay@2x.png') center/100% 100% no-repeat,url('assets/whitecat/hitcircle@2x.png') center/100% 100% no-repeat;opacity:var(--intro-skin-opacity,1);pointer-events:none}
-.intro-performance{position:fixed;z-index:1000;left:1rem;bottom:5rem;max-width:calc(100vw - 2rem);margin:0;padding:.75rem 1rem;border:1px solid #fff5;border-radius:.5rem;background:#151015ed;color:#fff;font:14px/1.7 monospace;white-space:pre-wrap;pointer-events:none}
+html[data-intro="pending"] #main-cookie::before,html[data-intro="settling"] #main-cookie::before{content:'';position:absolute;inset:0;border-radius:50%;corner-shape:round;background:url('assets/whitecat/hitcircleoverlay@2x.png') center/100% 100% no-repeat,url('assets/whitecat/hitcircle@2x.png') center/100% 100% no-repeat;opacity:var(--intro-skin-opacity,1);pointer-events:none}
+.intro-performance{position:fixed;z-index:1000;left:1rem;bottom:5rem;max-width:calc(100vw - 2rem);margin:0;padding:.75rem 1rem;border:1px solid #fff5;border-radius:.5rem;corner-shape:squircle;background:#151015ed;color:#fff;font:14px/1.7 monospace;white-space:pre-wrap;pointer-events:none}
 .intro-skip{position:fixed;bottom:1.25rem;right:1.5rem;margin:0;color:#dac2d3;font:400 .75rem Aller,'Trebuchet MS',sans-serif;letter-spacing:.06em;opacity:.6}
 @media(max-width:35rem){.intro-skip{right:1rem;bottom:1rem;font-size:.6875rem}}
