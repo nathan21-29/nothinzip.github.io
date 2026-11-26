@@ -20,6 +20,9 @@ body{isolation:isolate}#main-content{min-height:calc(100vh - 5.375rem);padding-b
 .home-tip{z-index:5;padding:0.5rem 1.125rem;background:rgba(24,15,25,.64);border-radius:1.875rem;corner-shape:squircle;backdrop-filter:blur(0.375rem)}
 .topbar{background:transparent}
 
+/* These values belong to each parallax layer, never its descendants. */
+@property --pointer-x{syntax:"<length>";inherits:false;initial-value:0px}
+@property --pointer-y{syntax:"<length>";inherits:false;initial-value:0px}
 /* Pointer movement uses separate translation so menu and card transforms remain intact. */
 @media(min-width:50.0625rem){
   .song-entry{

@@ -120,7 +120,7 @@ class Element {
   }
 }
 
-function fixture() {
+function fixture({ resizeObserver = true } = {}) {
   const document = new Element('document');
   document.innerHTML = `
     <section id="photography-screen">
@@ -169,11 +169,11 @@ function fixture() {
       return id;
     },
     cancelAnimationFrame(id) { frames.delete(id); },
-    ResizeObserver: class {
+    ResizeObserver: resizeObserver ? class {
       constructor(callback) { this.callback = callback; }
       observe(target) { pendingResizes.set(target, this.callback); }
       disconnect() { pendingResizes.clear(); }
-    },
+    } : undefined,
     MutationObserver: class {
       constructor(callback) { this.callback = callback; }
       observe(target) { if (target === dialog) dialogObservers.push(this.callback); }
@@ -455,6 +455,44 @@ test('Loaded previews ready their loop copies without eagerly fetching unseen ph
   view.roll.emit('load', { target: lazy });
   assert.ok(images.filter(image => image.getAttribute('src') === source).every(image => image.getAttribute('loading') === 'eager'));
   assert.equal(view.stream.scrollTop, 600);
+});
+
+test('Preview load bursts do not scan the gallery or force layout for every copy', () => {
+  const view = fixture();
+  view.gallery.setActive(true);
+  const images = view.roll.querySelectorAll('img');
+  const cycle = view.roll.firstElementChild;
+  let measurements = 0;
+  const measure = cycle.getBoundingClientRect.bind(cycle);
+  cycle.getBoundingClientRect = () => { measurements++; return measure(); };
+  const query = view.roll.querySelectorAll.bind(view.roll);
+  view.roll.querySelectorAll = selector => {
+    if (selector === 'img') throw new Error('load handler must use the preview index');
+    return query(selector);
+  };
+  for (const image of images) view.roll.emit('load', { target: image });
+  assert.equal(measurements, 0, 'only actual resize notifications measure the cycle');
+  view.flushResize();
+  assert.equal(measurements, 1);
+});
+
+test('Browsers without ResizeObserver batch image sizing and cancel it on leaving', () => {
+  const view = fixture({ resizeObserver: false });
+  view.gallery.setActive(true);
+  view.byId('photo-pause').click();
+  const images = view.roll.querySelectorAll('img');
+  let measurements = 0;
+  const cycle = view.roll.firstElementChild;
+  const measure = cycle.getBoundingClientRect.bind(cycle);
+  cycle.getBoundingClientRect = () => { measurements++; return measure(); };
+  for (const image of images) view.roll.emit('load', { target: image });
+  assert.equal(measurements, 0);
+  assert.equal(view.frames.size, 1, 'one sizing callback for the whole load burst');
+  view.runFrame(100);
+  assert.equal(measurements, 1);
+  view.roll.emit('load', { target: images[0] });
+  view.gallery.setActive(false);
+  assert.equal(view.frames.size, 0);
 });
 
 test('A released drag coasts in its direction and only loses speed, then stops scheduling frames', () => {

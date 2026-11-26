@@ -27,6 +27,24 @@
   let filtering = false;
   let nativeScrolling = false;
   let touchSettleTimer = 0;
+  const previewCopies = new Map();
+  const loadedPreviews = new Set();
+  let sizeFrame = 0;
+
+  function indexCycle(cycle, remove = false) {
+    for (const image of cycle.querySelectorAll('img')) {
+      const source = image.getAttribute('src');
+      if (remove) {
+        const copies = previewCopies.get(source);
+        copies?.delete(image);
+        if (!copies?.size) previewCopies.delete(source);
+      } else {
+        if (!previewCopies.has(source)) previewCopies.set(source, new Set());
+        previewCopies.get(source).add(image);
+        if (loadedPreviews.has(source)) image.setAttribute('loading', 'eager');
+      }
+    }
+  }
 
   function resetTouchScroll() {
     clearTimeout(touchSettleTimer);
@@ -111,13 +129,17 @@
     const previousHeight = cycleHeight;
     cycleHeight = count > 1 ? first.getBoundingClientRect().height : 0;
     const copies = cycleHeight ? Math.min(6, Math.max(3, Math.ceil(stream.clientHeight / cycleHeight) + 2)) : 1;
-    while (roll.children.length > copies) roll.lastElementChild.remove();
+    while (roll.children.length > copies) {
+      indexCycle(roll.lastElementChild, true);
+      roll.lastElementChild.remove();
+    }
     while (roll.children.length < copies) {
       const copy = first.cloneNode(true);
       copy.setAttribute('aria-hidden', 'true');
       copy.querySelectorAll('button').forEach(button => { button.tabIndex = -1; });
       // Repeated cards still open by pointer, but are omitted from keyboard navigation.
       roll.append(copy);
+      indexCycle(copy);
     }
     // Image loads must not relocate the viewport during native scrolling.
     if (!previousHeight && cycleHeight) stream.scrollTop += cycleHeight;
@@ -172,6 +194,8 @@
     $('#photo-empty').hidden = !!count;
     $('#photo-empty-location').textContent = selected ? locations.find(location => location.id === selected).name : 'Japan';
     roll.innerHTML = count ? `<div class="photo-cycle">${list.map(card).join('')}</div>` : '';
+    previewCopies.clear();
+    if (roll.firstElementChild) indexCycle(roll.firstElementChild);
     stream.scrollTop = position = appliedPosition = 0;
     stream.removeAttribute('aria-busy');
     filtering = false;
@@ -313,10 +337,18 @@
     // cached, ready its matching copies instead of waiting for lazy loading
     // after the jump. Unseen photos still load lazily.
     const source = event.target.getAttribute('src');
-    if (source) roll.querySelectorAll('img').forEach(image => {
-      if (image.getAttribute('src') === source && image.getAttribute('loading') !== 'eager') image.setAttribute('loading', 'eager');
+    if (source && !loadedPreviews.has(source)) {
+      loadedPreviews.add(source);
+      for (const image of previewCopies.get(source) || []) {
+        if (image.getAttribute('loading') !== 'eager') image.setAttribute('loading', 'eager');
+      }
+    }
+    // ResizeObserver handles actual height changes after layout, including
+    // images without dimensions. Loads of fixed-size copies need no measurement.
+    if (active && !observer && !sizeFrame) sizeFrame = requestAnimationFrame(() => {
+      sizeFrame = 0;
+      if (active) sizeLoop();
     });
-    sizeLoop();
   }, true);
   roll.addEventListener('error', event => { event.target.closest('.photo-image-button')?.classList.add('image-unavailable'); }, true);
   document.addEventListener('visibilitychange', syncPlayback);
@@ -334,7 +366,10 @@
       resetTouchScroll();
       stopMomentum();
       cancelAnimationFrame(wheelFrame); wheelFrame = 0; drag = null;
-      if (!active) { ++renderId; filterAnimation?.cancel(); stream.removeAttribute('aria-busy'); }
+      if (!active) {
+        ++renderId; filterAnimation?.cancel(); stream.removeAttribute('aria-busy');
+        cancelAnimationFrame(sizeFrame); sizeFrame = 0;
+      }
       else { select(selected, false); }
       syncPlayback();
     },

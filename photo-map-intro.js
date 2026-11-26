@@ -23,15 +23,20 @@
       return Array.from({ length: steps }, (_, step) => {
         const lon = point[0] + deltaLongitude * step / steps;
         const lat = point[1] + (next[1] - point[1]) * step / steps;
-        return { lon, lat, sinLon: Math.sin(lon * radians), cosLon: Math.cos(lon * radians), sinLat: Math.sin(lat * radians), cosLat: Math.cos(lat * radians) };
+        return { lon, lat, sinLon: Math.sin(lon * radians), cosLon: Math.cos(lon * radians), sinLat: Math.sin(lat * radians), cosLat: Math.cos(lat * radians),
+          projected: { x: 0, y: 0, flatX: 20 + (lon - 128) * 33, flatY: 20 + (46 - lat) * 40, sphereX: 0, sphereY: 0, z: 0, visible: false } };
       });
     });
   }
-  const land = data.land.map(ring => prepare(ring));
-  const japan = data.japan.map(ring => prepare(ring));
-  const grid = [];
-  for (let lat = -60; lat <= 60; lat += 30) grid.push(prepare(Array.from({ length: 121 }, (_, i) => [-180 + i * 3, lat]), false));
-  for (let lon = -180; lon < 180; lon += 30) grid.push(prepare(Array.from({ length: 61 }, (_, i) => [lon, -90 + i * 3]), false));
+  let land, japan, grid;
+  function prepareGeometry() {
+    if (land) return;
+    land = data.land.map(ring => prepare(ring));
+    japan = data.japan.map(ring => prepare(ring));
+    grid = [];
+    for (let lat = -60; lat <= 60; lat += 30) grid.push(prepare(Array.from({ length: 121 }, (_, i) => [-180 + i * 3, lat]), false));
+    for (let lon = -180; lon < 180; lon += 30) grid.push(prepare(Array.from({ length: 61 }, (_, i) => [lon, -90 + i * 3]), false));
+  }
   let active = false, motion = true, frame = 0, start = null, lastPaint = -Infinity, context;
 
   function finish() {
@@ -59,10 +64,12 @@
       const x = point.cosLat * deltaSin;
       const y = cosLat * point.sinLat - sinLat * point.cosLat * deltaCos;
       const z = sinLat * point.sinLat + cosLat * point.cosLat * deltaCos;
-      return { x: (320 + radius * x) * (1 - blend) + (20 + (point.lon - 128) * 33) * blend,
-        y: (335 - radius * y) * (1 - blend) + (20 + (46 - point.lat) * 40) * blend,
-        flatX: 20 + (point.lon - 128) * 33, flatY: 20 + (46 - point.lat) * 40,
-        sphereX: x, sphereY: y, z, visible: z >= 0 };
+      // Reuse one projection record per vertex throughout the entire flight.
+      const p = point.projected;
+      p.x = (320 + radius * x) * (1 - blend) + p.flatX * blend;
+      p.y = (335 - radius * y) * (1 - blend) + p.flatY * blend;
+      p.sphereX = x; p.sphereY = y; p.z = z; p.visible = z >= 0;
+      return p;
     };
     const ctx = context;
     ctx.clearRect(0, 0, 640, 670);
@@ -87,13 +94,22 @@
     function paint(rings, fill, blend = 0) {
       ctx.fillStyle = fill;
       for (const ring of rings) {
-        const projected = ring.map(point => project(point, blend));
-        if (!projected.some(point => point.visible)) continue;
+        let first = -1;
+        for (let i = 0; i < ring.length; i++) {
+          if (project(ring[i], blend).visible && first === -1) first = i;
+        }
+        if (first === -1) continue;
         // Clip at the horizon before filling. Projecting back-facing vertices
         // onto the rim creates chords through the ocean near the back pole.
-        const clipped = [];
+        // Stream clipped vertices into the canvas path instead of building
+        // projected and clipped arrays for every coastline on every frame.
+        ctx.beginPath();
+        let pen = false;
+        const vertex = point => {
+          if (pen) ctx.lineTo(point.x, point.y); else ctx.moveTo(point.x, point.y);
+          pen = true;
+        };
         let exit = null;
-        const first = projected.findIndex(point => point.visible);
         const crossing = (a, b) => {
           const t = a.z / (a.z - b.z);
           let x = a.sphereX + (b.sphereX - a.sphereX) * t;
@@ -106,29 +122,27 @@
             y: (335 - radius * y) * (1 - blend) + flatY * blend, flatX, flatY,
             angle: Math.atan2(-y, x) };
         };
-        for (let i = 0; i < projected.length; i++) {
-          const a = projected[(first + i) % projected.length];
-          const b = projected[(first + i + 1) % projected.length];
-          if (a.visible) clipped.push(a);
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[(first + i) % ring.length].projected;
+          const b = ring[(first + i + 1) % ring.length].projected;
+          if (a.visible) vertex(a);
           if (a.visible === b.visible) continue;
           const edge = crossing(a, b);
-          if (a.visible) { clipped.push(edge); exit = edge; }
+          if (a.visible) { vertex(edge); exit = edge; }
           else if (exit) {
             let sweep = edge.angle - exit.angle;
             sweep = Math.atan2(Math.sin(sweep), Math.cos(sweep));
             const steps = Math.max(1, Math.ceil(Math.abs(sweep) / (3 * radians)));
             for (let j = 1; j < steps; j++) {
               const t = j / steps, angle = exit.angle + sweep * t;
-              clipped.push({
+              vertex({
                 x: (320 + radius * Math.cos(angle)) * (1 - blend) + (exit.flatX + (edge.flatX - exit.flatX) * t) * blend,
                 y: (335 + radius * Math.sin(angle)) * (1 - blend) + (exit.flatY + (edge.flatY - exit.flatY) * t) * blend
               });
             }
-            clipped.push(edge); exit = null;
+            vertex(edge); exit = null;
           }
         }
-        ctx.beginPath();
-        clipped.forEach((point, i) => i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
         ctx.closePath(); ctx.fill();
       }
     }
@@ -169,6 +183,9 @@
     if (!bounds.width || !bounds.height) return;
     try { context = canvas.getContext('2d'); } catch { return; }
     if (!context) return;
+    // Other pages, reduced motion and the compact mobile view never prepare
+    // thousands of coastline/grid vertices. Subsequent flights reuse them.
+    prepareGeometry();
     const ratio = Math.min(window.devicePixelRatio || 1, 1.5, 850 / Math.max(bounds.width, bounds.height));
     canvas.width = Math.max(1, Math.round(bounds.width * ratio));
     canvas.height = Math.max(1, Math.round(bounds.height * ratio));

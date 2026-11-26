@@ -52,6 +52,8 @@
   const backdropLayers = [$('#world-image'), $('#world-image').cloneNode(false)];
   backdropLayers[1].removeAttribute('id');
   backdropLayers[0].after(backdropLayers[1]);
+  const pointerTargets = $$('.home-stage,.site-background,.world-image,.world-pattern,.floating-shapes');
+  let parallaxX = '0px', parallaxY = '0px';
 
   const credits = $('#acknowledgements');
   const creditsToggle = $('#acknowledgements-toggle');
@@ -102,8 +104,8 @@
     cursorGravity.time = time;
     const active = !window.SiteIntro?.active && state.motion && pointerQuery.matches && pointerPosition && !$$('dialog[open]').length;
     const home = active && state.screen === 'home';
-    document.body.style.setProperty('--pointer-x', `${home ? (pointerPosition.x / window.innerWidth * 2 - 1).toFixed(3) : 0}px`);
-    document.body.style.setProperty('--pointer-y', `${home ? (pointerPosition.y / window.innerHeight * 2 - 1).toFixed(3) : 0}px`);
+    const nextX = `${home ? (pointerPosition.x / window.innerWidth * 2 - 1).toFixed(3) : 0}px`;
+    const nextY = `${home ? (pointerPosition.y / window.innerHeight * 2 - 1).toFixed(3) : 0}px`;
     const projectsActive = active && state.screen === 'projects';
     if (projectsActive) {
       cursorGravity.y ??= pointerPosition.y;
@@ -118,20 +120,31 @@
       cursorGravity.y = null;
       cursorGravity.strength = 0;
     }
+    let entries = [];
     if (state.screen === 'projects' && (projectsActive || cursorGravity.strength)) {
       const uiScale = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
-      const entries = $$('.song-entry').map(entry => {
+      entries = $$('.song-entry').map(entry => {
         const card = entry.querySelector('.song-card').getBoundingClientRect();
         const distance = cursorGravity.y === null ? Infinity : Math.abs(cursorGravity.y - (card.top + card.height / 2));
         const proximity = Math.max(0, 1 - distance / (320 * uiScale));
         const pull = (1 - Math.cos(Math.PI * proximity)) / 2;
         return { entry, offset: -Math.min(88 * uiScale, window.innerWidth * .061) * pull * cursorGravity.strength };
       });
-      for (const { entry, offset } of entries) entry.style.setProperty('--cursor-offset', `${offset.toFixed(2)}px`);
       cardOffsetsActive = true;
     } else if (cardOffsetsActive) {
-      for (const entry of $$('.song-entry')) entry.style.setProperty('--cursor-offset', '0px');
+      entries = $$('.song-entry').map(entry => ({ entry, offset: 0 }));
       cardOffsetsActive = false;
+    }
+    // Finish geometry reads before any style writes. Keep fast-changing
+    // parallax values on their consumers, outside the photo/gallery subtrees.
+    for (const element of pointerTargets) {
+      if (nextX !== parallaxX) element.style.setProperty('--pointer-x', nextX);
+      if (nextY !== parallaxY) element.style.setProperty('--pointer-y', nextY);
+    }
+    parallaxX = nextX; parallaxY = nextY;
+    for (const { entry, offset } of entries) {
+      const value = `${offset.toFixed(2)}px`;
+      if (entry.style.getPropertyValue('--cursor-offset') !== value) entry.style.setProperty('--cursor-offset', value);
     }
     if (cursorGravity.strength !== targetStrength || (projectsActive && cursorGravity.y !== pointerPosition.y)) {
       pointerFrame = requestAnimationFrame(updatePointerMotion);
@@ -933,9 +946,9 @@
       const email = 'n76chan@uwaterloo.ca';
       navigator.clipboard.writeText(email).then(() => {
         const tooltip = $('#copy-tooltip');
-        tooltip.textContent = `${email} copied to clipboard`;
+        tooltip.textContent = `${email} copied to clipboard!`;
         tooltip.classList.add('is-visible');
-        target.setAttribute('aria-label', 'Email copied to clipboard');
+        target.setAttribute('aria-label', 'Email copied to clipboard!');
         target.title = 'Email copied';
         window.setTimeout(() => {
           if (!target.isConnected) return;
