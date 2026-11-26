@@ -4,7 +4,9 @@
   const TRACKING = .1;
   const BUFFER_X = 12;
   const BUFFER_Y = 6;
+  const PILL_INSET = 8;
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+  let cursorOwner = null;
   const groups = [...document.querySelectorAll('.footer-actions,.footer-start,.footer-controls')];
   const controllers = groups.map(group => {
     const pill = group.matches('.footer-actions');
@@ -12,7 +14,8 @@
     lens.className = 'footer-glass';
     lens.setAttribute('aria-hidden', 'true');
     if (pill) {
-      // Clip only the glass so the button tooltips can still extend above the pill.
+      // Clip at the pill's outer edge, leaving room for the lens to stretch vertically.
+      // The lens geometry reserves its own inset; tooltips remain outside this layer.
       const clip = document.createElement('div');
       clip.className = 'footer-glass-clip';
       clip.setAttribute('aria-hidden', 'true');
@@ -30,15 +33,31 @@
     let pointer = null;
     let transferStart = null;
     let pressed = false;
+    let pillWidth = 0;
     const reduced = () => document.body.classList.contains('reduced-motion');
     const available = button => button && !button.disabled && !button.closest('[hidden],[inert]') && button.getClientRects().length;
+
+    function releaseCursor() {
+      if (cursorOwner !== group) return;
+      cursorOwner = null;
+      window.SiteCursor?.setMorphTarget(null);
+    }
 
     function paint(squeeze = 0) {
       const press = pressed ? .94 : 1;
       lens.style.width = `${Math.max(0, current.width).toFixed(2)}px`;
       lens.style.height = `${Math.max(0, current.height).toFixed(2)}px`;
-      lens.style.transform = `translate3d(${current.x.toFixed(2)}px,${current.y.toFixed(2)}px,0) translate(-50%,-50%) scale(${((1 - squeeze * .4) * press).toFixed(3)},${((1 + squeeze * .12) * press).toFixed(3)})`;
+      const scaleX = (1 - squeeze * .4) * press;
+      const halfWidth = Math.max(0, current.width) * scaleX / 2;
+      // Keep the lens inside the inset even while tracking at the outer buttons.
+      const x = pill ? Math.max(PILL_INSET + halfWidth, Math.min(pillWidth - PILL_INSET - halfWidth, current.x)) : current.x;
+      const y = current.y;
+      lens.style.transform = `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) translate(-50%,-50%) scale(${scaleX.toFixed(3)},${((1 + squeeze * .12) * press).toFixed(3)})`;
       lens.style.opacity = Math.max(0, Math.min(1, current.opacity)).toFixed(3);
+      if (cursorOwner === group) {
+        const origin = group.getBoundingClientRect();
+        window.SiteCursor?.setMorphTarget({ x: origin.left + group.clientLeft + x, y: origin.top + group.clientTop + y });
+      }
     }
 
     function tick(time) {
@@ -74,12 +93,17 @@
 
     function bounds(button, origin) {
       const rect = button.getBoundingClientRect();
-      return { x: rect.left - origin.left - group.clientLeft + rect.width / 2,
+      const hitLeft = rect.left - origin.left - group.clientLeft;
+      const hitX = hitLeft + rect.width / 2;
+      pillWidth = group.clientWidth;
+      const left = pill ? Math.max(PILL_INSET, hitLeft) : hitLeft;
+      const right = pill ? Math.min(pillWidth - PILL_INSET, hitLeft + rect.width) : hitLeft + rect.width;
+      return { x: pill ? (left + right) / 2 : hitX, hitX,
         y: rect.top - origin.top - group.clientTop + rect.height / 2,
-        // Pill hitboxes already include the icon's buffer and tile the whole surface.
+        // Only the outer pill edges are inset; neighboring cells still meet laterally.
         // Standalone controls reserve the full horizontal travel plus extra padding.
-        width: pill ? rect.width : rect.width * (1 + TRACKING) + BUFFER_X * 2,
-        height: pill ? rect.height : rect.height + BUFFER_Y * 2, hitWidth: rect.width };
+        width: pill ? Math.max(0, right - left) : rect.width * (1 + TRACKING) + BUFFER_X * 2,
+        height: pill ? Math.max(0, rect.height - PILL_INSET * 2) : rect.height + BUFFER_Y * 2, hitWidth: rect.width };
     }
 
     function show(button, position = null) {
@@ -88,6 +112,8 @@
       const box = bounds(button, origin);
       const entry = position ? { x: position.x - origin.left - group.clientLeft, y: position.y - origin.top - group.clientTop } : box;
       const wasVisible = target.opacity > 0;
+      if (position) cursorOwner = group;
+      else releaseCursor();
       if (!wasVisible) {
         // Grow from the entry x coordinate, with the vertical axis locked throughout.
         Object.assign(current, { x: entry.x, y: box.y, width: 2, height: 2, opacity: 0 });
@@ -99,18 +125,24 @@
       Object.assign(target, { x: box.x, y: box.y, width: box.width, height: box.height, opacity: 1 });
       if (position && !reduced()) {
         // Exactly one tenth of pointer displacement inside the button's hitbox.
-        target.x += (entry.x - box.x) * TRACKING;
+        target.x += (entry.x - box.hitX) * TRACKING;
       }
       queue();
     }
 
     function hide() {
+      releaseCursor();
       activeButton = null;
       pressed = false;
       transferStart = null;
       target.opacity = 0;
       target.width = 2;
       target.height = 2;
+      if (pointer) {
+        const origin = group.getBoundingClientRect();
+        // Collapse toward the exit while preserving the lens's locked vertical axis.
+        target.x = pointer.x - origin.left - group.clientLeft;
+      }
       queue();
     }
 
@@ -127,8 +159,8 @@
       const boxes = buttons.map(button => bounds(button, origin));
       for (let i = 1; i < boxes.length; i++) {
         const left = boxes[i - 1], right = boxes[i];
-        const start = left.x + left.hitWidth / 2;
-        const end = right.x - right.hitWidth / 2;
+        const start = left.hitX + left.hitWidth / 2;
+        const end = right.hitX - right.hitWidth / 2;
         if (x < start || x > end || end <= start || Math.abs(y - left.y) > left.height / 2) continue;
         if (!target.opacity) return;
         const t = (x - start) / (end - start);
@@ -143,11 +175,13 @@
         else queue();
         return;
       }
-      if (group.contains(document.activeElement) && available(document.activeElement)) show(document.activeElement);
+      releaseCursor();
+      if (group.contains(document.activeElement) && available(document.activeElement) && document.activeElement.matches(':focus-visible')) show(document.activeElement);
       else hide();
     }
 
     function reset() {
+      releaseCursor();
       cancelAnimationFrame(frame);
       frame = 0;
       lastTime = 0;
@@ -161,10 +195,12 @@
 
     group.addEventListener('pointerover', onPointer);
     group.addEventListener('pointermove', onPointer, { passive: true });
-    group.addEventListener('pointerleave', () => {
-      pointer = null;
+    group.addEventListener('pointerleave', event => {
+      if (Number.isFinite(event.clientX)) pointer = { x: event.clientX, y: event.clientY };
+      releaseCursor();
       if (group.contains(document.activeElement) && document.activeElement.matches(':focus-visible')) show(document.activeElement);
       else hide();
+      pointer = null;
     });
     group.addEventListener('pointerdown', event => {
       if (event.pointerType !== 'touch' && activeButton) { pressed = true; queue(); }
@@ -185,4 +221,5 @@
   document.addEventListener('visibilitychange', reset);
   finePointer.addEventListener('change', reset);
   new MutationObserver(reset).observe(document.body, { attributes: true, attributeFilter: ['class', 'data-screen'] });
+  new MutationObserver(reset).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
 })();

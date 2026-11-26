@@ -227,3 +227,64 @@ test('Only real movement postpones hiding, and leaving cancels the idle timer', 
   assert.equal(view.frames.size, 0);
   assert.equal(view.timers.size, 0);
 });
+
+test('Glass absorbs the skin and trail, then releases the cursor from its anchor', () => {
+  const view = fixture();
+  view.move(0, 200); view.tick(0);
+  view.window.SiteCursor.setMorphTarget({ x: 240, y: 320 });
+  view.move(90, 210); view.tick(90);
+  const halfway = cursors(view).at(-1);
+  assert.equal(halfway.rect[2], 45);
+  assert.equal(halfway.rect[0] + halfway.rect[2] / 2, 225);
+  assert.equal(halfway.alpha, .5);
+  view.move(180, 220); view.tick(180);
+  view.paints.length = 0;
+  view.move(210, 230); view.tick(210);
+  assert.equal(view.paints.length, 0, 'no skin or trail remains over the button');
+  assert.equal(view.frames.size, 0, 'hover does not need a persistent cursor loop');
+  view.window.SiteCursor.setMorphTarget(null);
+  view.move(210, 280); view.tick(210);
+  assert.equal(view.paints.length, 0, 'release starts inside the glass');
+  view.move(300, 300); view.tick(300);
+  const returning = cursors(view).at(-1);
+  assert.equal(returning.rect[2], 45);
+  assert.equal(returning.rect[0] + returning.rect[2] / 2, 270);
+  view.tick(390);
+  assert.equal(cursors(view).at(-1).rect[2], 90);
+  assert.equal(trails(view).length, 0, 'hover motion never leaks into the returning trail');
+  assert.equal(view.frames.size, 0);
+});
+
+test('Quick hover reversals preserve cursor size and anchor updates do not restart absorption', () => {
+  const view = fixture();
+  view.move(0, 200); view.tick(0);
+  view.window.SiteCursor.setMorphTarget({ x: 240, y: 320 });
+  view.tick(90);
+  assert.equal(cursors(view).at(-1).rect[2], 45);
+  view.window.SiteCursor.setMorphTarget(null); view.tick(90);
+  assert.equal(cursors(view).at(-1).rect[2], 45);
+  view.tick(180);
+  assert.equal(cursors(view).at(-1).rect[2], 67.5);
+  view.window.SiteCursor.setMorphTarget({ x: 260, y: 320 });
+  view.tick(270);
+  view.window.SiteCursor.setMorphTarget({ x: 270, y: 320 });
+  view.tick(360);
+  view.paints.length = 0; view.tick(400);
+  assert.equal(view.paints.length, 0);
+  assert.equal(view.frames.size, 0);
+  view.window.emit('blur');
+  view.move(450, 300); view.tick(450);
+  assert.equal(cursors(view).at(-1).rect[2], 90, 'focus loss restores normal cursor state');
+});
+
+test('Reduced motion swaps cursor ownership immediately without animation', () => {
+  const view = fixture({ reduced: true });
+  view.move(0, 200); view.tick(0);
+  view.window.SiteCursor.setMorphTarget({ x: 240, y: 320 });
+  view.paints.length = 0; view.tick(10);
+  assert.equal(view.paints.length, 0);
+  assert.equal(view.frames.size, 0);
+  view.window.SiteCursor.setMorphTarget(null); view.tick(20);
+  assert.equal(cursors(view).at(-1).rect[2], 90);
+  assert.equal(view.frames.size, 0);
+});

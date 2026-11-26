@@ -332,7 +332,7 @@ body:not([data-screen="home"]) .restart-intro{display:none}
 body[data-screen="projects"] .bottom-bar .footer-controls{margin:0}
 .bottom-bar .footer-clock{display:inline;font-variant-numeric:tabular-nums;min-width:5ch}
 .bottom-bar .footer-start{position:absolute;left:4.5rem;top:0;height:100%}
-.footer-actions{--footer-cell-width:5rem;position:absolute;left:50%;bottom:.5rem;transform:translateX(-50%);display:flex;align-items:stretch;justify-content:center;gap:0;width:max-content;max-width:calc(100vw - 2rem);min-height:3.5rem;padding:0;border:1px solid #ffffff25;border-radius:999px;corner-shape:round;background:rgba(34,24,32,.75)}
+.footer-actions{--footer-cell-width:5rem;position:absolute;left:50%;bottom:.5rem;transform:translateX(-50%);display:flex;align-items:stretch;justify-content:center;gap:0;width:max-content;max-width:calc(100vw - 2rem);min-height:3.5rem;padding:0;border:1px solid #ffffff25;border-radius:999px;corner-shape:round;background:rgba(34,24,32,.75);box-shadow:0 0 16px 2px #f58dbb1a}
 .footer-actions .project-toolbar{display:contents}
 .footer-actions .project-toolbar button{position:relative;display:grid;place-items:center;width:var(--footer-cell-width);height:3.5rem;padding:0;border-radius:0;corner-shape:round;transition:background .18s ease-out}
 .footer-actions .project-toolbar button:last-child{border-radius:0 999px 999px 0}

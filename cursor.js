@@ -12,6 +12,7 @@
   const IDLE_DELAY = 15000;
   const SHRINK_DURATION = 500;
   const GROW_DURATION = 150;
+  const MORPH_DURATION = 180;
   const TRAIL_SIZE = 64 * SIZE;
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
   const root = document.documentElement;
@@ -45,6 +46,36 @@
   let idleTimer = 0;
   let visibilityScale = 1;
   let visibilityTransition = null;
+  let morphAnchor = null;
+  let absorbed = false;
+  let morphAmount = 0;
+  let morphTransition = null;
+
+  function currentMorphAmount(time) {
+    if (!morphTransition) return morphAmount;
+    const progress = Math.min(1, Math.max(0, (time - morphTransition.start) / MORPH_DURATION));
+    const eased = progress * progress * (3 - 2 * progress);
+    return morphTransition.from + (morphAmount - morphTransition.from) * eased;
+  }
+
+  // The glass owns the anchor while hovered; the canvas owns the skin and trail.
+  window.SiteCursor = {
+    setMorphTarget(position) {
+      if (position) morphAnchor = { ...position };
+      const next = Boolean(position);
+      if (next === absorbed) return;
+      const time = performance.now();
+      const from = currentMorphAmount(time);
+      absorbed = next;
+      morphAmount = next ? 1 : 0;
+      morphTransition = enabled && from !== morphAmount ? { from, start: time } : null;
+      // Never retain a trail inside a button or seed a streak across its exit.
+      points = [];
+      lastPosition = null;
+      lastSample = -Infinity;
+      if (!window.SiteIntro?.active) queueDraw();
+    }
+  };
 
   canvas.className = 'whitecat-trail';
   canvas.setAttribute('aria-hidden', 'true');
@@ -65,7 +96,7 @@
     lastPosition = null;
     lastSample = -Infinity;
     render(performance.now());
-    if (pressTransition || visibilityTransition) queueDraw();
+    if (pressTransition || visibilityTransition || morphTransition) queueDraw();
   }
 
   function currentVisibilityScale(time) {
@@ -130,6 +161,10 @@
     idleTimer = 0;
     visibilityScale = 1;
     visibilityTransition = null;
+    absorbed = false;
+    morphAmount = 0;
+    morphTransition = null;
+    morphAnchor = null;
     pointerPosition = null;
     pressed = false;
     pressTransition = null;
@@ -154,6 +189,7 @@
     root.classList.toggle('whitecat-cursor', imagesReady && finePointer.matches);
     if (!finePointer.matches) resetPointer();
     if (!enabled) {
+      morphTransition = null;
       pressTransition = null;
       if (!finePointer.matches) pressed = false;
       applyCursorScale(pressed ? PRESS_SCALE : 1);
@@ -186,18 +222,27 @@
     }
     if (window.SiteIntro?.active) return;
     const scale = currentVisibilityScale(time);
+    const morph = currentMorphAmount(time);
     points = points.filter(point => time - point.time < FADE_DURATION);
     for (const point of points) {
       const age = Math.max(0, time - point.time) / FADE_DURATION;
       context.globalAlpha = .65 * (1 - age);
       // Draw independent, fixed-size sprites with normal blending, never a connecting path.
-      if (scale > 0) drawSprite(trailImage, point.x, point.y, TRAIL_SIZE * scale);
+      if (scale > 0 && !absorbed) drawSprite(trailImage, point.x, point.y, TRAIL_SIZE * scale * (1 - morph));
     }
     context.globalAlpha = 1;
     if (imagesReady && finePointer.matches && pointerPosition) {
       const { image, size } = pressFrames[Math.max(0, cursorFrameIndex)];
       const sprite = image.complete && image.naturalWidth ? image : cursorImage;
-      if (scale > 0) drawSprite(sprite, pointerPosition.x, pointerPosition.y, size * scale);
+      const sizeScale = scale * (1 - morph);
+      if (sizeScale > 0) {
+        const anchor = morphAnchor || pointerPosition;
+        context.globalAlpha = 1 - morph;
+        drawSprite(sprite,
+          pointerPosition.x + (anchor.x - pointerPosition.x) * morph,
+          pointerPosition.y + (anchor.y - pointerPosition.y) * morph, size * sizeScale);
+        context.globalAlpha = 1;
+      }
     }
   }
 
@@ -208,8 +253,9 @@
       if (time - pressTransition.start >= PRESS_DURATION) pressTransition = null;
     }
     if (visibilityTransition && time - visibilityTransition.start >= visibilityTransition.duration) visibilityTransition = null;
+    if (morphTransition && time - morphTransition.start >= MORPH_DURATION) morphTransition = null;
     render(time);
-    if (points.length || pressTransition || visibilityTransition) queueDraw();
+    if (points.length || pressTransition || visibilityTransition || morphTransition) queueDraw();
   }
 
   function queueDraw() {
@@ -236,7 +282,7 @@
     pointerPosition = { x: event.clientX, y: event.clientY };
     if (window.SiteIntro?.active) return;
     queueDraw();
-    if (!enabled) return;
+    if (!enabled || absorbed || morphTransition) return;
     if (lastPosition?.x === event.clientX && lastPosition?.y === event.clientY) return;
     if (time - lastSample < SAMPLE_INTERVAL - .01) return;
     // Skip missed samples rather than interpolating a continuous trail across a fast flick.
@@ -268,6 +314,7 @@
   new MutationObserver(updatePreference).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   new MutationObserver(records => {
     if (records.some(record => record.target instanceof HTMLDialogElement)) {
+      window.SiteCursor.setMorphTarget(null);
       clearTrail();
       raiseTrail();
     }

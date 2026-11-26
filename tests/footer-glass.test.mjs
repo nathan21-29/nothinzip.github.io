@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('../footer-glass.js', import.meta.url), 'utf8');
 
 function fixture({ reduced = false, fine = true, width = 40, pill = false } = {}) {
-  let now = 0, nextFrame = 0, lens;
+  let now = 0, nextFrame = 0, lens, clip;
   const frames = new Map();
   const observers = [];
   const events = () => ({
@@ -20,8 +20,8 @@ function fixture({ reduced = false, fine = true, width = 40, pill = false } = {}
     matches: () => true
   }));
   const group = {
-    ...events(), clientLeft: 1, clientTop: 1,
-    prepend(node) { lens = node.child || node; }, classList: { add() {} },
+    ...events(), clientLeft: 1, clientTop: 1, clientWidth: width * 3,
+    prepend(node) { lens = node.child || node; if (node.child) clip = node; }, classList: { add() {} },
     matches: () => pill,
     querySelectorAll: () => buttons,
     getBoundingClientRect: () => ({ left: 100, top: 200 }),
@@ -33,7 +33,8 @@ function fixture({ reduced = false, fine = true, width = 40, pill = false } = {}
     querySelectorAll: () => [group],
     createElement: () => ({ style: {}, setAttribute() {}, append(node) { this.child = node; } })
   };
-  const window = events();
+  const morphTargets = [];
+  const window = { ...events(), SiteCursor: { setMorphTarget(position) { morphTargets.push(position); } } };
   vm.runInNewContext(source, {
     document, window, matchMedia: () => ({ ...events(), matches: fine }),
     performance: { now: () => now },
@@ -55,7 +56,7 @@ function fixture({ reduced = false, fine = true, width = 40, pill = false } = {}
     assert.equal(frames.size, 0, 'animation must release its frame loop');
   }
   const position = () => lens.style.transform.match(/translate3d\(([-.\d]+)px,([-.\d]+)px/).slice(1).map(Number);
-  return { group, window, buttons, document, lens, frames, observers, move, tick, settle, position };
+  return { group, window, buttons, document, lens, clip, frames, observers, move, tick, settle, position, morphTargets };
 }
 
 test('Glass grows from the entry coordinate, tracks at 0.1x, and stops at rest', () => {
@@ -111,22 +112,51 @@ test('The shared lens squeezes in the gap and recovers over the next button', ()
   assert.equal(f.lens.style.opacity, '0.000');
 });
 
-test('Contiguous pill cells use full elongated lenses and squeeze across their shared boundary', () => {
+test('Pill lenses meet laterally while retaining an 8px outer inset', () => {
   for (const width of [80, 72]) {
     const f = fixture({ pill: true, width });
     for (let i = 0; i < 3; i++) {
       f.move(1 + width * (i + .5), i); f.settle();
-      assert.equal(parseFloat(f.lens.style.width), width);
-      assert.equal(parseFloat(f.lens.style.height), 56);
-      assert.deepEqual(f.position(), [width * (i + .5), 28]);
+      assert.equal(parseFloat(f.lens.style.width), width - (i === 1 ? 0 : 8));
+      assert.equal(parseFloat(f.lens.style.height), 40);
+      assert.deepEqual(f.position(), [width * (i + .5) + (i === 0 ? 4 : i === 2 ? -4 : 0), 28]);
+    }
+    for (const [x, button] of [[1, 0], [1 + width * 3, 2]]) {
+      f.move(x, button); f.settle();
+      const halfWidth = parseFloat(f.lens.style.width) / 2;
+      assert.ok(f.position()[0] - halfWidth >= 8);
+      assert.ok(f.position()[0] + halfWidth <= width * 3 - 8);
     }
     f.move(width * 2 + .9, 1); f.settle();
     f.move(width * 2 + 1.1, 2); f.tick();
     assert.equal(f.lens.style.opacity, '1.000');
     assert.match(f.lens.style.transform, /scale\(0\./);
     f.settle();
-    assert.equal(parseFloat(f.lens.style.width), width);
+    assert.equal(parseFloat(f.lens.style.width), width - 8);
     assert.equal(f.position()[1], 28);
+  }
+});
+
+test('Pill transfers leave room for the stretched top and bottom border on every frame', () => {
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  const clipStyle = css.match(/\.footer-glass-clip\{([^}]+)\}/)[1];
+  assert.match(clipStyle, /(?:^|;)inset:0(?:;|$)/);
+  for (const width of [80, 72]) {
+    const f = fixture({ pill: true, width });
+    assert.equal(f.clip.style.inset, undefined, 'do not override the outer clipping boundary with the lens inset');
+    f.move(1 + width / 2, 0); f.settle();
+    for (const button of [1, 2, 1, 0]) {
+      f.move(1 + width * (button + .5), button);
+      for (let frame = 0; frame < 24; frame++) {
+        f.tick();
+        const scaleY = Number(f.lens.style.transform.match(/scale\([-.\d]+,([-.\d]+)\)/)[1]);
+        const halfHeight = parseFloat(f.lens.style.height) * scaleY / 2;
+        const y = f.position()[1];
+        assert.ok(y - halfHeight > 0, 'top border stays inside the clip');
+        assert.ok(y + halfHeight < 56, 'bottom border stays inside the clip');
+      }
+    }
+    f.settle();
   }
 });
 
@@ -159,4 +189,30 @@ test('Focus, page changes, visibility loss and pointer cancellation clean up the
     assert.equal(f.frames.size, 0);
     assert.equal(f.lens.style.opacity, '0.000');
   }
+});
+
+test('Pointer hover hands the cursor to the lens across buttons and releases on exit or reset', () => {
+  const f = fixture();
+  f.move(40, 0); f.settle();
+  assert.ok(f.morphTargets.at(-1));
+  f.move(70); f.settle();
+  f.move(100, 1); f.settle();
+  assert.ok(f.morphTargets.every(Boolean), 'scrubbing through a gap never releases the cursor');
+  f.group.emit('pointerleave', { clientX: 225, clientY: 224 }); f.settle();
+  assert.equal(f.morphTargets.at(-1), null);
+  assert.equal(f.position()[0], 124, 'the glass contracts toward the exit');
+  f.move(100, 1); f.settle();
+  f.window.emit('blur');
+  assert.equal(f.morphTargets.at(-1), null);
+});
+
+test('Keyboard focus keeps the cursor independent, and moving off a focused button releases it', () => {
+  const f = fixture();
+  f.group.emit('focusin', { target: f.buttons[1] }); f.settle();
+  assert.equal(f.morphTargets.length, 0);
+  f.move(100, 1); f.settle();
+  f.document.activeElement = f.buttons[1];
+  f.move(200); f.settle();
+  assert.equal(f.morphTargets.at(-1), null);
+  assert.equal(f.lens.style.opacity, '1.000', 'keyboard focus can retain its highlight independently');
 });
