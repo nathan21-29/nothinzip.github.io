@@ -126,7 +126,7 @@ function fixture({ resizeObserver = true } = {}) {
     <section id="photography-screen">
       <svg id="photo-map-lines"></svg><div id="photo-map-pins"></div><div id="photo-mobile-cities"></div>
       <button id="photo-all">All photos</button><span id="photo-location-label"></span>
-      <h2 id="photo-collection-title"></h2><span id="photo-count"></span><button id="photo-pause"><span></span></button>
+      <h2 id="photo-collection-title"></h2><span id="photo-count"></span><button id="photo-pause"><i class="photo-pause-icon" aria-hidden="true"></i></button>
       <div id="photo-stream"><div id="photo-roll"></div><div id="photo-empty"><span id="photo-empty-location"></span></div></div>
       <p id="photo-stream-hint"></p>
     </section>

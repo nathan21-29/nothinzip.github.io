@@ -102,7 +102,6 @@
     pause.disabled = count < 2 || !motion;
     pause.setAttribute('aria-pressed', String(!playing));
     pause.setAttribute('aria-label', playing ? 'Pause photo carousel' : 'Play photo carousel');
-    pause.querySelector('span').textContent = playing ? 'Pause' : 'Play';
     $('#photo-stream-hint').textContent = !count ? 'A few places, a few moments.'
       : enabled ? 'Drift through. Stop anywhere.' : 'Scroll to explore · click a photo to enlarge';
     if (enabled && !frame) frame = requestAnimationFrame(tick);

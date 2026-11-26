@@ -43,7 +43,8 @@ body[data-screen="photography"] #main-content{height:100svh;min-height:0}
 .photo-library-header{display:flex;align-items:center;gap:.875rem;min-height:3.5rem;padding-bottom:.75rem;border-bottom:1px solid var(--line)}
 .photo-library-header h2{margin:0;font-weight:400;font-family:Aller,'Trebuchet MS',sans-serif;font-size:1.375rem}
 .photo-count{color:var(--muted);font-size:.875rem;margin-right:auto}
-.photo-pause{display:flex;gap:.5rem;align-items:center;justify-content:center;min-height:2.75rem;min-width:5.5rem;padding:.5rem .625rem;border:1px solid #ffffff2b;border-radius:.25rem;corner-shape:squircle;background:#ffffff0b;color:#f4dcea;font-size:.875rem}
+.photo-playback{position:relative;flex:none;width:3.5rem;height:3.5rem;border:1px solid #ffffff25;border-radius:50%;corner-shape:round;background:rgba(34,24,32,.75);box-shadow:0 0 16px 2px #f58dbb1a;backdrop-filter:blur(8px) saturate(1.35);-webkit-backdrop-filter:blur(8px) saturate(1.35)}
+.photo-pause{display:grid;place-items:center;width:100%;height:100%;padding:0;border:0;border-radius:50%;corner-shape:round;background:none;color:#f4dcea;font-size:.875rem}
 .photo-pause:disabled{opacity:.35;cursor:default}
 .photo-pause-icon{width:.625rem;height:.75rem;border-inline:.2rem solid currentColor}
 .photo-pause[aria-pressed="true"] .photo-pause-icon{height:0;border:0;border-top:.375rem solid transparent;border-bottom:.375rem solid transparent;border-left:.625rem solid currentColor}
@@ -80,8 +81,6 @@ body[data-screen="photography"] .screen.entering{animation-timing-function:cubic
   .photo-count{font-size:.75rem}
   .photo-library-header{gap:.5rem;flex-wrap:wrap}
   .photo-library-header h2{font-size:1.125rem}
-  .photo-pause{min-width:2.5rem}
-  .photo-pause span:last-child{display:none}
 }
 @media(max-width:50rem) and (min-width:35.0625rem){
   .photo-city-label{display:none}

@@ -9,9 +9,10 @@
   const KEYS = ['x', 'y', 'width', 'height', 'opacity'];
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
   let cursorOwner = null;
-  const groups = [...document.querySelectorAll('.footer-actions,.footer-start,.footer-controls')];
+  const groups = [...document.querySelectorAll('.footer-actions,.footer-start,.footer-controls,.photo-playback')];
   const controllers = groups.map(group => {
     const pill = group.matches('.footer-actions');
+    const circle = group.matches('.photo-playback');
     const lens = document.createElement('div');
     lens.className = 'footer-glass';
     lens.setAttribute('aria-hidden', 'true');
@@ -23,7 +24,7 @@
       lens.append(slice);
       return slice;
     });
-    if (pill) {
+    if (pill || circle) {
       // Clip at the pill's outer edge, leaving room for the lens to stretch vertically.
       // The lens geometry reserves its own inset; tooltips remain outside this layer.
       const clip = document.createElement('div');
@@ -64,7 +65,7 @@
       const scaleX = (1 - squeeze * .4) * press;
       const halfWidth = width * scaleX / 2;
       // Keep the lens inside the inset even while tracking at the outer buttons.
-      const x = pill ? Math.max(PILL_INSET + halfWidth, Math.min(pillWidth - PILL_INSET - halfWidth, current.x)) : current.x;
+      const x = circle ? pillWidth / 2 : pill ? Math.max(PILL_INSET + halfWidth, Math.min(pillWidth - PILL_INSET - halfWidth, current.x)) : current.x;
       const y = current.y;
       writeStyle(lens, 'transform', `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) scale(${scaleX.toFixed(3)},${((1 + squeeze * .12) * press).toFixed(3)})`);
       writeStyle(lens, 'opacity', Math.max(0, Math.min(1, current.opacity)).toFixed(3));
@@ -129,8 +130,8 @@
         y: rect.top - origin.top - group.clientTop + rect.height / 2,
         // Only the outer pill edges are inset; neighboring cells still meet laterally.
         // Standalone controls reserve the full horizontal travel plus extra padding.
-        width: pill ? Math.max(0, right - left) : rect.width * (1 + TRACKING) + BUFFER_X * 2,
-        height: pill ? Math.max(0, rect.height - PILL_INSET * 2) : rect.height + BUFFER_Y * 2, hitWidth: rect.width };
+        width: circle ? Math.max(0, rect.height - PILL_INSET * 2) : pill ? Math.max(0, right - left) : rect.width * (1 + TRACKING) + BUFFER_X * 2,
+        height: pill || circle ? Math.max(0, rect.height - PILL_INSET * 2) : rect.height + BUFFER_Y * 2, hitWidth: rect.width };
     }
 
     function measure() {

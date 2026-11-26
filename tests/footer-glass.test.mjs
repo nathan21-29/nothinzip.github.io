@@ -25,7 +25,7 @@ function fixture({ reduced = false, fine = true, width = 40, pill = false } = {}
   const group = {
     ...events(), clientLeft: 1, clientTop: 1, clientWidth: width * 3,
     prepend(node) { if (node.className === 'footer-glass-clip') { clip = node; lens = node.children[0]; } else lens = node; }, classList: { add() {} },
-    matches: () => pill,
+    matches: selector => selector === '.footer-actions' && pill,
     querySelectorAll: () => buttons,
     getBoundingClientRect: () => { reads++; return { left: 100, top: 200 }; },
     contains: node => buttons.includes(node)
